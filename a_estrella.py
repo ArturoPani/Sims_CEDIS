@@ -9,7 +9,12 @@ ESTACION = 2  # transitable
 
 Celda = Tuple[int, int]
 
-def a_estrella(grid: np.ndarray, inicio: Celda, meta: Celda) -> Optional[List[Celda]]:
+def a_estrella(
+    grid: np.ndarray,
+    inicio: Celda,
+    meta: Celda,
+    direcciones: Optional[np.ndarray] = None,
+) -> Optional[List[Celda]]:
     """
     Algoritmo A* sobre un grid 4-conectado (arriba/abajo/izquierda/derecha).
 
@@ -75,6 +80,20 @@ def a_estrella(grid: np.ndarray, inicio: Celda, meta: Celda) -> Optional[List[Ce
 
             if (not en_rango(nx, ny)) or (not transitable(nx, ny)):
                 continue
+
+            # Verificar restricción direccional de la celda actual
+            if direcciones is not None:
+                # N_BIT=1 dy=-1, S_BIT=2 dy=+1, E_BIT=4 dx=+1, W_BIT=8 dx=-1
+                if dy == -1:
+                    bit = 1
+                elif dy == 1:
+                    bit = 2
+                elif dx == 1:
+                    bit = 4
+                else:
+                    bit = 8
+                if not (int(direcciones[y, x]) & bit):
+                    continue
 
             nuevo_g = g_actual + 1
             if nuevo_g < costo_g.get((nx, ny), 10**9):

@@ -3,7 +3,7 @@ import argparse
 import json
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 from out_paths import asegurar_dirs_de_salidas
 
@@ -11,6 +11,13 @@ LIBRE = 0
 ANAQUEL = 1
 ESTACION = 2
 BLOQUEADO = 3
+
+# Bits de dirección para el array de direcciones (uint8)
+N_BIT = 1   # puede moverse norte   (y-1)
+S_BIT = 2   # puede moverse sur     (y+1)
+E_BIT = 4   # puede moverse este    (x+1)
+W_BIT = 8   # puede moverse oeste   (x-1)
+TODAS = N_BIT | S_BIT | E_BIT | W_BIT  # 15 = sin restricción
 
 Celda = Tuple[int, int]
 
@@ -60,6 +67,91 @@ def _bfs_alcanzable(grid: np.ndarray, celdas_inicio: List[Celda]) -> np.ndarray:
                 visto[ny, nx] = True
                 cola.append((nx, ny))
     return visto
+
+def generar_direcciones(
+    grid: np.ndarray,
+    v_aisles_x: List[int],
+    h_aisles_y: List[int],
+    ancho_pasillo: int,
+    alto_pasillo: int,
+    pasillo_int_dirs: Optional[Dict[int, int]] = None,
+    storage_y: Optional[Tuple[int, int]] = None,
+) -> np.ndarray:
+    """
+    Construye un array uint8 con flags de dirección para cada celda del grid.
+
+    Convención de pasillos grandes (2 celdas de ancho/alto) — doble sentido con carriles:
+      - Pasillos verticales : columna izquierda → Norte; columna derecha → Sur.
+      - Pasillos horizontales: fila superior   → Oeste; fila inferior   → Este.
+      - Intersecciones (ambos): todas las direcciones.
+
+    Convención de pasillos internos (1 celda) — sentido único:
+      - pasillo_int_dirs: dict {x_columna → bits_de_dirección}.
+      - Si la columna x está en el dict y no es pasillo principal ni intersección,
+        se aplica la dirección indicada.
+
+    storage_y: rango [y_min, y_max) del área de almacenaje. Las restricciones de
+      pasillos verticales e internos solo se aplican dentro de este rango; fuera
+      (apron, buffer, docks, parking) todas las celdas quedan con TODAS, evitando
+      que las columnas de pasillo bloqueen el acceso a las estaciones.
+
+    El bit de cada dirección se define con N_BIT, S_BIT, E_BIT, W_BIT.
+    Obstáculos (ANAQUEL, BLOQUEADO) quedan con TODAS (no importa su valor).
+    """
+    alto_g, ancho_g = grid.shape
+    dirs = np.full((alto_g, ancho_g), TODAS, dtype=np.uint8)
+
+    # Mitad izquierda / derecha de cada pasillo vertical
+    half_v = ancho_pasillo // 2
+    v_left: set = set()
+    v_right: set = set()
+    for x0 in v_aisles_x:
+        for i in range(half_v):
+            v_left.add(x0 + i)
+        for i in range(half_v, ancho_pasillo):
+            v_right.add(x0 + i)
+
+    # Mitad superior / inferior de cada pasillo horizontal
+    half_h = alto_pasillo // 2
+    h_top: set = set()
+    h_bot: set = set()
+    for y0 in h_aisles_y:
+        for i in range(half_h):
+            h_top.add(y0 + i)
+        for i in range(half_h, alto_pasillo):
+            h_bot.add(y0 + i)
+
+    all_v = v_left | v_right
+    all_h = h_top | h_bot
+
+    for y in range(alto_g):
+        in_h = y in all_h
+        top_row = y in h_top
+        # Las restricciones verticales/internas solo aplican dentro del área de almacenaje
+        in_storage = storage_y is None or (storage_y[0] <= y < storage_y[1])
+        for x in range(ancho_g):
+            if grid[y, x] not in (LIBRE, ESTACION):
+                continue  # obstáculos: no importa
+
+            in_v = (x in all_v) and in_storage
+            if in_v and in_h:
+                dirs[y, x] = TODAS                        # intersección
+            elif in_v:
+                if x in v_left:
+                    dirs[y, x] = N_BIT | E_BIT | W_BIT   # col izq → Norte
+                else:
+                    dirs[y, x] = S_BIT | E_BIT | W_BIT   # col der → Sur
+            elif in_h:
+                if top_row:
+                    dirs[y, x] = W_BIT | N_BIT | S_BIT   # fila sup → Oeste
+                else:
+                    dirs[y, x] = E_BIT | N_BIT | S_BIT   # fila inf → Este
+            elif in_storage and pasillo_int_dirs is not None and x in pasillo_int_dirs:
+                dirs[y, x] = pasillo_int_dirs[x]         # pasillo interno → sentido único
+            # else: TODAS (default, sin cambio)
+
+    return dirs
+
 
 def generar_layout(seed: int, ancho: int, alto: int, estaciones: int) -> Dict:
     """
@@ -133,14 +225,18 @@ def generar_layout(seed: int, ancho: int, alto: int, estaciones: int) -> Dict:
     alto_bloque = (alto_storage - alto_total_pasillos_horiz) // filas
 
     # Pasillos principales verticales
+    v_aisles_x: List[int] = []
     x = x_left
     for _ in range(cols + 1):
+        v_aisles_x.append(x)
         _recortar_rectangulo(grid, x, y_top, ancho_pasillo_principal, alto_storage, LIBRE)
         x += ancho_pasillo_principal + ancho_bloque
 
     # Pasillos principales horizontales
+    h_aisles_y: List[int] = []
     y = y_top
     for _ in range(filas + 1):
+        h_aisles_y.append(y)
         _recortar_rectangulo(grid, x_left, y, ancho_storage, alto_pasillo_horizontal, LIBRE)
         y += alto_pasillo_horizontal + alto_bloque
 
@@ -188,8 +284,39 @@ def generar_layout(seed: int, ancho: int, alto: int, estaciones: int) -> Dict:
 
     # Cross-aisles cada 10 filas (corredor de 2 filas)
     cada = 10
-    for yy in range(y_top + 5, y_bottom, cada):
+    cross_aisles_y: List[int] = list(range(y_top + 5, y_bottom, cada))
+    for yy in cross_aisles_y:
         _recortar_rectangulo(grid, x_left, yy, ancho_storage, 2, LIBRE)
+
+    # Calcular direcciones de pasillos internos (1 celda de ancho, sentido único alternante)
+    # Patrón dentro de cada bloque: [ANAQUEL, ANAQUEL, LIBRE, ANAQUEL, ANAQUEL, LIBRE, ...]
+    # El k-ésimo pasillo interno (k=0,1,2,...) alterna Norte/Sur.
+    pasillo_int_dirs: Dict[int, int] = {}
+    for c in range(cols):
+        x_bloque = x_left + (c + 1) * ancho_pasillo_principal + c * ancho_bloque
+        ix0 = x_bloque + 1          # margen interno del bloque
+        iw = max(0, ancho_bloque - 2)
+        col_idx = 0
+        xx = ix0
+        while xx < ix0 + iw:
+            if col_idx % 3 == 2:    # columna de pasillo interno
+                k = col_idx // 3
+                pasillo_int_dirs[xx] = N_BIT if k % 2 == 0 else S_BIT
+            col_idx += 1
+            xx += 1
+
+    # Generar mapa de direcciones
+    # storage_y acota las restricciones verticales/internas al área de almacenaje;
+    # fuera de ella (apron, buffer, docks, parking) las celdas quedan con TODAS.
+    direcciones = generar_direcciones(
+        grid,
+        v_aisles_x,
+        h_aisles_y + cross_aisles_y,
+        ancho_pasillo_principal,
+        alto_pasillo_horizontal,
+        pasillo_int_dirs,
+        storage_y=(y_top, y_top + alto_storage),
+    )
 
     # Conectar parking con apron
     x_corredor = x_parking0 + ancho_parking + 2
@@ -222,6 +349,7 @@ def generar_layout(seed: int, ancho: int, alto: int, estaciones: int) -> Dict:
         "width": ancho,
         "height": alto,
         "grid": grid,
+        "direcciones": direcciones,
         # JSONs
         "estaciones": [{"estacion_id": e.estacion_id, "dock": e.dock, "cell": e.cell} for e in lista_estaciones],
         "anaqueles": [{"anaquel_id": aid, "home": home} for aid, home in anaqueles.items()],
@@ -253,6 +381,8 @@ def main():
                         help="(Opcional) Ruta explícita para anaqueles.json")
     parser.add_argument("--salida_spawn", type=str, default=None,
                         help="(Opcional) Ruta explícita para spawn.json")
+    parser.add_argument("--salida_direcciones", type=str, default=None,
+                        help="(Opcional) Ruta explícita para direcciones.npy")
 
     # parámetro viejo, sin uso oficial
     parser.add_argument(
@@ -274,14 +404,16 @@ def main():
     ruta_estaciones = args.salida_estaciones or _ruta_por_escenario(args.escenario, "estaciones.json")
     ruta_anaqueles = args.salida_anaqueles or _ruta_por_escenario(args.escenario, "anaqueles.json")
     ruta_spawn = args.salida_spawn or _ruta_por_escenario(args.escenario, "spawn.json")
+    ruta_direcciones = args.salida_direcciones or _ruta_por_escenario(args.escenario, "direcciones.npy")
 
-    asegurar_dirs_de_salidas([ruta_layout, ruta_estaciones, ruta_anaqueles, ruta_spawn])
+    asegurar_dirs_de_salidas([ruta_layout, ruta_estaciones, ruta_anaqueles, ruta_spawn, ruta_direcciones])
 
     layout = generar_layout(args.seed, args.ancho, args.alto, args.estaciones)
     grid = layout["grid"]
 
-    # Guardar grid
+    # Guardar grid y direcciones
     np.save(ruta_layout, grid)
+    np.save(ruta_direcciones, layout["direcciones"])
 
     # Guardar JSONs
     with open(ruta_estaciones, "w", encoding="utf-8") as f:
@@ -300,10 +432,11 @@ def main():
     bloqueadas = int(np.sum(grid == BLOQUEADO))
 
     print(f"[OK] Escenario: {args.escenario}")
-    print(f"[OK] Layout     : {ruta_layout}")
-    print(f"[OK] Estaciones : {ruta_estaciones}")
-    print(f"[OK] Anaqueles  : {ruta_anaqueles}")
-    print(f"[OK] Spawn      : {ruta_spawn}")
+    print(f"[OK] Layout      : {ruta_layout}")
+    print(f"[OK] Direcciones : {ruta_direcciones}")
+    print(f"[OK] Estaciones  : {ruta_estaciones}")
+    print(f"[OK] Anaqueles   : {ruta_anaqueles}")
+    print(f"[OK] Spawn       : {ruta_spawn}")
     print("Layout generado:")
     print(f"  tamaño: {args.ancho}x{args.alto}")
     print(f"  celdas: LIBRE={libres} ANAQUEL={anaquel_celdas} ESTACION={estacion_celdas} BLOQUEADO={bloqueadas}")

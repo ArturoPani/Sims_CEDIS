@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 from typing import List
+import numpy as np
 from out_paths import asegurar_dirs_de_salidas
 from sim_core import Pedido, SimAlmacen, cargar_layout
 
@@ -56,6 +57,7 @@ def main():
     parser.add_argument("--anaqueles", type=str, default=None, help="(Opcional) Ruta explícita a anaqueles.json")
     parser.add_argument("--spawn", type=str, default=None, help="(Opcional) Ruta explícita a spawn.json")
     parser.add_argument("--pedidos", type=str, default=None, help="(Opcional) Ruta explícita a pedidos.json")
+    parser.add_argument("--direcciones", type=str, default=None, help="(Opcional) Ruta explícita a direcciones.npy")
 
     # Salida
     parser.add_argument("--salida_metricas", type=str, default=None, help="(Opcional) Ruta explícita a metricas.json")
@@ -68,6 +70,7 @@ def main():
     ruta_anaqueles = args.anaqueles or _ruta_por_escenario(args.escenario, "anaqueles.json")
     ruta_spawn = args.spawn or _ruta_por_escenario(args.escenario, "spawn.json")
     ruta_pedidos = args.pedidos or _ruta_por_escenario(args.escenario, "pedidos.json")
+    ruta_direcciones = args.direcciones or _ruta_por_escenario(args.escenario, "direcciones.npy")
 
     ruta_metricas = args.salida_metricas or _ruta_por_escenario(args.escenario, "metricas.json")
     asegurar_dirs_de_salidas([ruta_metricas])
@@ -75,6 +78,8 @@ def main():
     grid, estacion_dock, anaquel_home, spawns = cargar_layout(
         ruta_layout, ruta_estaciones, ruta_anaqueles, ruta_spawn
     )
+
+    direcciones = np.load(ruta_direcciones) if os.path.exists(ruta_direcciones) else None
 
     pedidos = cargar_pedidos(ruta_pedidos)
 
@@ -86,6 +91,7 @@ def main():
         puntos_spawn=spawns,
         pedidos=pedidos,
         seed=args.seed,
+        direcciones=direcciones,
     )
 
     sim.run(args.ticks)
