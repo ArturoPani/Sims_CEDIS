@@ -233,6 +233,19 @@ Esto permite:
 - comparar estrategias,
 - evaluar mejoras de forma justa.
 
+## 7.1 Comparar métricas vs benchmark
+Para comparar visualmente las métricas actuales contra el benchmark base:
+
+```bash
+python comparar_metricas.py --benchmark outputs/benchmark/metricas.json --actual outputs/<escenario>/metricas.json
+```
+
+El script:
+- abre una interfaz visual con barras de impacto por métrica,
+- indica cuáles métricas mejoran y cuáles empeoran,
+- muestra el cambio absoluto y porcentual,
+- guarda un PNG de comparación en `outputs/<escenario>/comparacion_vs_benchmark.png`.
+
 ## 8. Uso académico
 Este benchmark está diseñado como **reto integrador** para equipos multidisciplinarios:
 
