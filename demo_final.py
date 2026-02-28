@@ -5,6 +5,7 @@ import os
 from typing import List
 from out_paths import asegurar_dirs_de_salidas
 from sim_core import Pedido, SimAlmacen, cargar_layout
+from pasillos_dirigidos import cargar_politica, politica_a_restricciones
 
 def _ruta_por_escenario(escenario: str, nombre_archivo: str) -> str:
     return os.path.join("outputs", escenario, nombre_archivo)
@@ -60,6 +61,9 @@ def main():
     # Salida
     parser.add_argument("--salida_metricas", type=str, default=None, help="(Opcional) Ruta explícita a metricas.json")
 
+    # Política de pasillos dirigidos
+    parser.add_argument("--politica", type=str, default=None, help="(Opcional) Ruta a politica_transito.json")
+
     args = parser.parse_args()
 
     # Resolver rutas por escenario si no se dieron explícitamente
@@ -78,6 +82,12 @@ def main():
 
     pedidos = cargar_pedidos(ruta_pedidos)
 
+    # Cargar política de pasillos dirigidos si se proporcionó
+    mov_permitidos, costos_direccion, celdas_no_stop = None, None, None
+    if args.politica:
+        politica = cargar_politica(args.politica)
+        mov_permitidos, costos_direccion, celdas_no_stop = politica_a_restricciones(politica)
+
     sim = SimAlmacen(
         grid=grid,
         estacion_dock=estacion_dock,
@@ -86,6 +96,9 @@ def main():
         puntos_spawn=spawns,
         pedidos=pedidos,
         seed=args.seed,
+        movimientos_permitidos=mov_permitidos,
+        costos_direccion=costos_direccion,
+        celdas_no_stop=celdas_no_stop,
     )
 
     sim.run(args.ticks)

@@ -124,6 +124,9 @@ class SimAlmacen:
         puntos_spawn: List[Celda],
         pedidos: List[Pedido],
         seed: int,
+        movimientos_permitidos: Optional[Dict] = None,
+        costos_direccion: Optional[Dict] = None,
+        celdas_no_stop: Optional[set] = None,
     ):
         self.grid = grid
         self.estacion_dock = estacion_dock
@@ -131,6 +134,11 @@ class SimAlmacen:
         self.pedidos = pedidos
         self.seed = seed
         self.tick = 0
+
+        # Política de pasillos dirigidos (opcional)
+        self.movimientos_permitidos = movimientos_permitidos
+        self.costos_direccion = costos_direccion
+        self.celdas_no_stop = celdas_no_stop
 
         self.tabla_reservas = TablaReservas()
 
@@ -208,7 +216,9 @@ class SimAlmacen:
                 self.pendientes.append(mejor_idx)
                 continue
 
-            ruta = a_estrella(self.grid, r.pos, pickup)
+            ruta = a_estrella(self.grid, r.pos, pickup,
+                             movimientos_permitidos=self.movimientos_permitidos,
+                             costos_direccion=self.costos_direccion)
             if ruta is None:
                 # No alcanzable; revertir asignación
                 r.estado = "INACTIVO"
@@ -235,7 +245,9 @@ class SimAlmacen:
 
         if r.estado == "A_RECOGER":
             r.estado = "A_ESTACION"
-            ruta = a_estrella(self.grid, r.pos, r.estacion_dock)
+            ruta = a_estrella(self.grid, r.pos, r.estacion_dock,
+                             movimientos_permitidos=self.movimientos_permitidos,
+                             costos_direccion=self.costos_direccion)
             if ruta is None:
                 # reintentar después
                 r.estado = "A_RECOGER"
@@ -249,7 +261,9 @@ class SimAlmacen:
             if pickup is None:
                 r.estado = "A_ESTACION"
                 return
-            ruta = a_estrella(self.grid, r.pos, pickup)
+            ruta = a_estrella(self.grid, r.pos, pickup,
+                             movimientos_permitidos=self.movimientos_permitidos,
+                             costos_direccion=self.costos_direccion)
             if ruta is None:
                 r.estado = "A_ESTACION"
                 return

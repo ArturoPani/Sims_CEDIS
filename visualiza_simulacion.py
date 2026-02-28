@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib import animation
 from out_paths import asegurar_dirs_de_salidas
 from sim_core import Pedido, SimAlmacen, cargar_layout
+from pasillos_dirigidos import cargar_politica, politica_a_restricciones
 
 # ======== FFMPEG PATH ============================================
 # Ruta fija, eventualmente se agregará el switch --ffmpeg_path.
@@ -296,6 +297,9 @@ def main():
     ap.add_argument("--salida_video", type=str, default=None)
     ap.add_argument("--prefijo_heatmap", type=str, default=None)
 
+    # Política de pasillos dirigidos
+    ap.add_argument("--politica", type=str, default=None, help="(Opcional) Ruta a politica_transito.json")
+
     args = ap.parse_args()
 
     if args.ffmpeg_path:
@@ -326,6 +330,12 @@ def main():
     )
     pedidos = cargar_pedidos(ruta_pedidos)
 
+    # Cargar política de pasillos dirigidos si se proporcionó
+    mov_permitidos, costos_direccion, celdas_no_stop = None, None, None
+    if args.politica:
+        politica = cargar_politica(args.politica)
+        mov_permitidos, costos_direccion, celdas_no_stop = politica_a_restricciones(politica)
+
     graficar_layout(grid, ruta_layout_png)
     print(f"[OK] Layout escrito en {ruta_layout_png}")
 
@@ -336,7 +346,10 @@ def main():
         robots=args.robots,
         puntos_spawn=spawns,
         pedidos=pedidos,
-        seed=args.seed, 
+        seed=args.seed,
+        movimientos_permitidos=mov_permitidos,
+        costos_direccion=costos_direccion,
+        celdas_no_stop=celdas_no_stop,
     )
 
     animar(
