@@ -1,0 +1,16 @@
+{
+  "seed": 12,
+  "tick_final": 10000,
+  "robots": 50,
+  "pedidos_totales": 600,
+  "pedidos_completados": 594,
+  "tiempo_promedio_pedido_ticks": 2931.56734006734,
+  "throughput_pedidos_por_1000_ticks": 59.4,
+  "tiempo_promedio_espera_ticks": 583.8,
+  "utilizacion_promedio": 0.600994,
+  "colisiones_vertice": 0,
+  "intercambios_arista": 0,
+  "deadlock": 4103,
+  "eventos_alto": 29190,
+  "distancia_total_celdas": 270713
+}
