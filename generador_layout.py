@@ -137,17 +137,17 @@ def generar_direcciones(
             if in_v and in_h:
                 dirs[y, x] = TODAS                        # intersección
             elif in_v:
-                if x in v_left:
-                    dirs[y, x] = N_BIT | E_BIT | W_BIT   # col izq → Norte
-                else:
-                    dirs[y, x] = S_BIT | E_BIT | W_BIT   # col der → Sur
+                # Opción 3: Pasillos verticales con "escape" bidireccional
+                # Permite invertir dirección si está bloqueada + desvíos laterales
+                dirs[y, x] = N_BIT | S_BIT | E_BIT | W_BIT   # bidireccional N-S + laterales
             elif in_h:
-                if top_row:
-                    dirs[y, x] = W_BIT | N_BIT | S_BIT   # fila sup → Oeste
-                else:
-                    dirs[y, x] = E_BIT | N_BIT | S_BIT   # fila inf → Este
+                # Opción 3: Pasillos horizontales con "escape" bidireccional
+                # Permite invertir dirección si está bloqueada + desvíos verticales
+                dirs[y, x] = W_BIT | E_BIT | N_BIT | S_BIT   # bidireccional O-E + verticales
             elif in_storage and pasillo_int_dirs is not None and x in pasillo_int_dirs:
-                dirs[y, x] = pasillo_int_dirs[x]         # pasillo interno → sentido único
+                # Opción 3: Pasillos internos RESTRINGIDOS a solo vertical
+                # Evita caos permitiendo solo N-S (sin E-O para mantener orden)
+                dirs[y, x] = N_BIT | S_BIT  # SOLO vertical, sin laterales
             # else: TODAS (default, sin cambio)
 
     return dirs

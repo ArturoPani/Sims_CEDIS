@@ -175,7 +175,7 @@ def mostrar_ventana(base: dict, nuevo: dict, mejoras: int, empeoradas: int) -> N
         figure=fig,
         height_ratios=[0.055, 0.33, 0.43, 0.185],
         hspace=0.38,
-        left=0.06, right=0.97, top=0.97, bottom=0.04,
+        left=0.25, right=0.97, top=0.97, bottom=0.04,
     )
 
     # ── Encabezado ────────────────────────────────────────────────────────────
