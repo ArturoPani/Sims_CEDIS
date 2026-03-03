@@ -106,8 +106,9 @@ def generar_layout(seed: int, ancho: int, alto: int, estaciones: int) -> Dict:
     # Apron frontal arriba del buffer (para incorporaciones)
     _recortar_rectangulo(grid, 1, y_buffer - 2, ancho - 2, 2, LIBRE)
 
-    # Zona de parking/carga
-    ancho_parking, alto_parking = 12, 8
+    # Zona de parking/carga (proporcional al grid)
+    ancho_parking = min(240, ancho - 5)
+    alto_parking = min(250, alto - 10)
     x_parking0, y_parking0 = 2, alto - (alto_parking + 5)
     _recortar_rectangulo(grid, x_parking0, y_parking0, ancho_parking, alto_parking, LIBRE)
 
