@@ -13,7 +13,7 @@ from pasillos_dirigidos import cargar_politica, politica_a_restricciones
 
 # ======== FFMPEG PATH ============================================
 # Ruta fija, eventualmente se agregará el switch --ffmpeg_path.
-mpl.rcParams["animation.ffmpeg_path"] = r"C:\Users\darth\Downloads\ffmpeg-master-latest-win64-gpl-shared\ffmpeg-master-latest-win64-gpl-shared\bin\ffmpeg.exe"
+mpl.rcParams["animation.ffmpeg_path"] = "/usr/bin/ffmpeg"
 # =================================================================
 
 LIBRE = 0
@@ -131,15 +131,17 @@ def _mapa_colores_estados() -> Tuple[Dict[str, float], mpl.colors.Colormap, mpl.
     Colorea por estado con valores discretos y un cmap discreto.
     """
     estado_a_val = {
-        "INACTIVO": 0.0,
-        "A_RECOGER": 1.0,
+        "INACTIVO":   0.0,
+        "A_RECOGER":  1.0,
         "A_ESTACION": 2.0,
-        "RETORNO": 3.0,
+        "RETORNO":    3.0,
+        "A_CARGA":    4.0,
+        "EN_CARGA":   5.0,
     }
 
-    colores = ["#777777", "#ff7f0e", "#1f77b4", "#2ca02c"]
+    colores = ["#777777", "#ff7f0e", "#1f77b4", "#2ca02c", "#d62728", "#9467bd"]
     cmap = mpl.colors.ListedColormap(colores, name="estado_robots")
-    norm = mpl.colors.Normalize(vmin=0.0, vmax=3.0)
+    norm = mpl.colors.Normalize(vmin=0.0, vmax=5.0)
     return estado_a_val, cmap, norm
 
 def animar(
@@ -182,8 +184,8 @@ def animar(
     scat = ax.scatter(xs, ys, s=30, c=cvals, cmap=cmap, norm=norm)
 
     cbar = plt.colorbar(scat, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_ticks([0, 1, 2, 3])
-    cbar.set_ticklabels(["INACTIVO", "A_RECOGER", "A_ESTACION", "RETORNO"])
+    cbar.set_ticks([0, 1, 2, 3, 4, 5])
+    cbar.set_ticklabels(["INACTIVO", "A_RECOGER", "A_ESTACION", "RETORNO", "A_CARGA", "EN_CARGA"])
 
     texto = ax.text(0.02, 0.98, "", transform=ax.transAxes, va="top")
 

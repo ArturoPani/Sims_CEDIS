@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Dict, List, NamedTuple, Optional, Tuple
 import numpy as np
@@ -57,7 +58,7 @@ class Pedido:
 class Robot:
     robot_id: int
     pos: Celda
-    estado: str = "INACTIVO"  # INACTIVO, A_RECOGER, A_ESTACION, RETORNO
+    estado: str = "INACTIVO"  # INACTIVO, A_RECOGER, A_ESTACION, RETORNO, A_CARGA, EN_CARGA
     pedido_id: Optional[int] = None
     anaquel_home: Optional[Celda] = None
     estacion_dock: Optional[Celda] = None
@@ -66,6 +67,9 @@ class Robot:
     ticks_espera: int = 0
     celdas_movidas: int = 0
     ticks_ocupado: int = 0
+    tick_inicio_turno: int = 0
+    spawn_home: Optional[Celda] = None
+    necesita_carga: bool = False
 
 def cargar_layout(ruta_grid: str, ruta_estaciones: str, ruta_anaqueles: str, ruta_spawn: str):
     """
@@ -115,6 +119,8 @@ def elegir_objetivo_adyacente(grid: np.ndarray, celda_anaquel: Celda) -> Optiona
     return None
 
 class SimAlmacen:
+    DURACION_TURNO: int = 7200  # 2 horas simuladas (ticks)
+
     def __init__(
         self,
         grid: np.ndarray,
@@ -142,12 +148,21 @@ class SimAlmacen:
 
         self.tabla_reservas = TablaReservas()
 
+        # Cola de robots descansados y contador de relevos
+        self._cola_descansados: deque = deque()
+        self.relevo_count: int = 0
+
         # Inicializar robots en puntos spawn únicos
         if len(puntos_spawn) < robots:
             raise RuntimeError("No hay suficientes puntos de spawn para la cantidad de robots.")
+
+        paso_escalonado = self.DURACION_TURNO // max(robots, 1)
+
         self.lista_robots: List[Robot] = []
         for i in range(robots):
-            self.lista_robots.append(Robot(robot_id=i, pos=puntos_spawn[i]))
+            r = Robot(robot_id=i, pos=puntos_spawn[i], spawn_home=puntos_spawn[i])
+            r.tick_inicio_turno = i * paso_escalonado
+            self.lista_robots.append(r)
 
         # Reservar posiciones iniciales en tick 0
         for r in self.lista_robots:
@@ -170,7 +185,7 @@ class SimAlmacen:
 
     def _asignar_pedidos(self) -> None:
         # Greedy: para cada robot inactivo, asignar el anaquel más cercano a una celda adyacente de recolección
-        inactivos = [r for r in self.lista_robots if r.estado == "INACTIVO"]
+        inactivos = [r for r in self.lista_robots if r.estado == "INACTIVO" and not r.necesita_carga]
         if (not inactivos) or (not self.pendientes):
             return
 
@@ -232,6 +247,35 @@ class SimAlmacen:
             r.ruta = ruta
             r.idx_ruta = 0
 
+    def _gestionar_carga(self) -> None:
+        for r in self.lista_robots:
+            if r.estado in ("EN_CARGA", "A_CARGA"):
+                continue
+            if not r.necesita_carga and self.tick - r.tick_inicio_turno >= self.DURACION_TURNO:
+                r.necesita_carga = True
+            if r.estado == "INACTIVO" and r.necesita_carga:
+                ruta = a_estrella(self.grid, r.pos, r.spawn_home)
+                r.estado = "A_CARGA"
+                r.ruta = ruta if ruta else []
+                r.idx_ruta = 0
+
+    def _gestionar_relevo(self, robot_cansado: Robot) -> None:
+        if self._cola_descansados:
+            # Hay robots descansados esperando — el primero de la fila sale a trabajar
+            fresco = self._cola_descansados.popleft()
+            fresco.estado = "INACTIVO"
+            fresco.necesita_carga = False
+            fresco.tick_inicio_turno = self.tick
+            self.relevo_count += 1
+            # El robot cansado entra al fondo de la fila
+            self._cola_descansados.append(robot_cansado)
+        else:
+            # Fila vacía — el mismo robot se recarga y vuelve al trabajo
+            robot_cansado.estado = "INACTIVO"
+            robot_cansado.necesita_carga = False
+            robot_cansado.tick_inicio_turno = self.tick
+            self.relevo_count += 1
+
     def _completar_pedido(self, pedido_id: int) -> None:
         # Buscar pedido por ID (O(n) con 600 pedidos es aceptable).
         for p in self.pedidos:
@@ -274,26 +318,41 @@ class SimAlmacen:
             if r.pedido_id is not None:
                 self._completar_pedido(r.pedido_id)
 
-            r.estado = "INACTIVO"
             r.pedido_id = None
             r.anaquel_home = None
             r.estacion_dock = None
             r.ruta = []
             r.idx_ruta = 0
 
+            if r.necesita_carga:
+                ruta = a_estrella(self.grid, r.pos, r.spawn_home)
+                r.estado = "A_CARGA"
+                r.ruta = ruta if ruta else []
+                r.idx_ruta = 0
+            else:
+                r.estado = "INACTIVO"
+
+        elif r.estado == "A_CARGA":
+            r.estado = "EN_CARGA"
+            r.necesita_carga = False
+            r.ruta = []
+            r.idx_ruta = 0
+            self._gestionar_relevo(r)
+
     def step(self) -> None:
         self._liberar_pedidos()
+        self._gestionar_carga()
         self._asignar_pedidos()
 
         # Proponer movimientos
         propuestas: Dict[int, Celda] = {}
         for r in self.lista_robots:
-            if r.estado != "INACTIVO":
+            if r.estado not in ("INACTIVO", "EN_CARGA"):
                 r.ticks_ocupado += 1
 
             self._planear_siguiente_tramo_si_llego(r)
 
-            if r.estado == "INACTIVO" or (not r.ruta):
+            if r.estado in ("INACTIVO", "EN_CARGA") or (not r.ruta):
                 propuestas[r.robot_id] = r.pos
                 continue
 
@@ -374,4 +433,5 @@ class SimAlmacen:
             "deadlock": self.conteo_deadlock,
             "eventos_alto": self.eventos_alto,
             "distancia_total_celdas": int(sum(r.celdas_movidas for r in self.lista_robots)),
+            "relevos": self.relevo_count,
         }
