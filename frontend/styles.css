@@ -1,0 +1,217 @@
+/* ═══════════════════════════════════════════════════════════════
+   CEDIS Sim — Estilos principales
+   ═══════════════════════════════════════════════════════════════ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Top bar ──────────────────────────────────────────────────── */
+.topbar {
+  background: #16213e;
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 2px solid #0f3460;
+}
+.topbar h1 { font-size: 18px; color: #00d4ff; }
+.topbar select,
+.topbar input {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+  padding: 5px 10px;
+  border-radius: 4px;
+}
+.status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.status-dot.ok  { background: #00e676; }
+.status-dot.off { background: #ff5252; }
+
+/* ── Main layout ──────────────────────────────────────────────── */
+.main { display: flex; flex: 1; overflow: hidden; }
+
+/* ── Left panel ───────────────────────────────────────────────── */
+.panel-left {
+  width: 300px;
+  background: #16213e;
+  padding: 15px;
+  overflow-y: auto;
+  border-right: 2px solid #0f3460;
+}
+.panel-left h2 {
+  font-size: 14px;
+  color: #00d4ff;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.section {
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid #0f3460;
+}
+
+/* ── Form elements ────────────────────────────────────────────── */
+.form-group { margin-bottom: 10px; }
+.form-group label {
+  display: block;
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.form-row {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.form-row .form-group { flex: 1; margin-bottom: 0; }
+.form-group input {
+  width: 100%;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #0f3460;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.form-group input::placeholder { color: #555; }
+.form-group input:focus {
+  outline: none;
+  border-color: #00d4ff;
+  box-shadow: 0 0 4px rgba(0, 212, 255, 0.3);
+}
+
+button {
+  background: #0f3460;
+  color: #00d4ff;
+  border: 1px solid #00d4ff;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+button:hover { background: #00d4ff; color: #1a1a2e; }
+button.danger { border-color: #ff5252; color: #ff5252; }
+button.danger:hover { background: #ff5252; color: #fff; }
+button.success { border-color: #00e676; color: #00e676; }
+button.success:hover { background: #00e676; color: #1a1a2e; }
+
+/* ── Center (canvas) ──────────────────────────────────────────── */
+.panel-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+#gridCanvas {
+  position: absolute;
+  top: 0; left: 0;
+  cursor: grab;
+}
+#gridCanvas.dragging { cursor: grabbing; }
+
+.sim-info {
+  position: absolute;
+  top: 10px; left: 50%;
+  transform: translateX(-50%);
+  background: rgba(22,33,62,0.9);
+  padding: 6px 18px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #00d4ff;
+  z-index: 5;
+  pointer-events: none;
+}
+#tooltip {
+  position: fixed;
+  background: rgba(22,33,62,0.95);
+  color: #e0e0e0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
+  display: none;
+  border: 1px solid #00d4ff;
+  z-index: 10;
+}
+.zoom-controls {
+  position: absolute;
+  bottom: 12px; right: 12px;
+  display: flex; gap: 6px;
+  z-index: 5;
+}
+.zoom-controls button { padding: 6px 10px; font-size: 16px; min-width: 34px; }
+.zoom-label {
+  position: absolute;
+  bottom: 14px; right: 180px;
+  background: rgba(22,33,62,0.9);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #00d4ff;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* ── Bottom tables ────────────────────────────────────────────── */
+.panel-bottom {
+  height: 220px;
+  background: #16213e;
+  border-top: 2px solid #0f3460;
+  display: flex;
+  overflow: hidden;
+}
+.table-section { flex: 1; padding: 10px; overflow-y: auto; }
+.table-section h3 {
+  font-size: 12px;
+  color: #00d4ff;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+table { width: 100%; border-collapse: collapse; font-size: 11px; }
+th {
+  background: #0f3460;
+  color: #00d4ff;
+  padding: 5px 8px;
+  text-align: left;
+  position: sticky;
+  top: 0;
+}
+td { padding: 4px 8px; border-bottom: 1px solid #0f3460; }
+tr:hover td { background: rgba(0,212,255,0.05); }
+
+/* ── Estado badges ────────────────────────────────────────────── */
+.badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+.badge-inactivo  { background: #333; color: #999; }
+.badge-recoger   { background: #1b5e20; color: #69f0ae; }
+.badge-estacion  { background: #e65100; color: #ffcc80; }
+.badge-retorno   { background: #4a148c; color: #ce93d8; }
+.badge-pendiente { background: #333; color: #999; }
+.badge-en_proceso { background: #0d47a1; color: #82b1ff; }
+.badge-completado { background: #1b5e20; color: #69f0ae; }
+.badge-no_liberado { background: #263238; color: #546e7a; }
+
+/* ── Sim controls ─────────────────────────────────────────────── */
+.sim-controls { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.sim-controls input { width: 70px; }
+
+/* ── Checkbox label ───────────────────────────────────────────── */
+.checkbox-label {
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 8px;
+  color: #aaa;
+}

@@ -32,14 +32,37 @@ El simulador **no persigue una solución globalmente óptima**, sino que proporc
 sim_almacen/
 ├─ README.md
 ├─ requirements.txt
+├─ .env                          ← credenciales BD y auth (no versionar)
 ├─ a_estrella.py
+├─ comparar_metricas.py
 ├─ demo_final.py
 ├─ generador_layout.py
 ├─ generador_pedidos.py
+├─ generar_politica.py
 ├─ out_paths.py
+├─ pasillos_dirigidos.py
 ├─ sim_core.py
 ├─ tabla_reservas.py
 ├─ visualiza_simulacion.py
+├─ api/                          ← FastAPI backend
+│  ├─ main.py                   ← entry point, middlewares, rutas de página
+│  ├─ sim_runner.py              ← runner de simulación en hilo de fondo
+│  └─ routers/
+│     ├─ auth.py                 ← login / logout (sesión cookie)
+│     ├─ layout.py               ← GET /layout
+│     ├─ metricas_router.py      ← comparación de métricas entre runs
+│     ├─ pedidos.py              ← CRUD pedidos
+│     ├─ robots.py               ← CRUD robots
+│     └─ simulacion.py           ← iniciar / detener / estado / métricas
+├─ db/                           ← capa de datos Azure SQL
+│  ├─ connection.py              ← pool de conexiones pyodbc
+│  └─ crud.py                   ← queries: robots, pedidos, runs
+├─ frontend/                     ← SPA estática servida por FastAPI
+│  ├─ index.html                 ← página principal de simulación
+│  ├─ metricas.html              ← comparación de métricas (Chart.js)
+│  ├─ login.html                 ← pantalla de login admin
+│  ├─ styles.css                 ← estilos compartidos
+│  └─ app.js                    ← lógica de la simulación + animación
 ├─ pruebas/
 │  ├─ prueba_a_estrella.py
 │  └─ prueba_tabla_reservas.py
@@ -51,6 +74,7 @@ sim_almacen/
       ├─ pedidos.json
       ├─ spawn.json
       ├─ layout.npy
+      ├─ politica_transito.json
       ├─ heatmap_esperas.png
       ├─ heatmap_ratio.png
       ├─ heatmap_visitas.png
@@ -225,7 +249,59 @@ Define y valida la estructura de carpetas de salida:
 - creación automática de `outputs/<escenario>/`,
 - normalización de rutas para métricas y visualizaciones.
 
-## 7. Reproducibilidad
+## 7. Aplicación web (FastAPI)
+Además de la ejecución por línea de comandos, el proyecto incluye una **aplicación web** que permite operar el simulador desde el navegador.
+
+### Requisitos adicionales
+```bash
+pip install -r requirements.txt
+```
+Dependencias extra: `fastapi`, `uvicorn[standard]`, `python-dotenv`, `pyodbc`, `itsdangerous`, `python-multipart`.
+
+### Variables de entorno (`.env`)
+```dotenv
+DB_CONNECTION_STRING=Driver={SQL Server};Server=tcp:<server>.database.windows.net,1433;Database=cedis_db;...
+ADMIN_USER=admin
+ADMIN_PASSWORD=<contraseña>
+SECRET_KEY=<clave-secreta-para-cookies>
+```
+
+### Arranque del servidor
+```bash
+python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
+```
+Navega a `http://127.0.0.1:8000/` para acceder al frontend.
+
+### Funcionalidades web
+| Página | Ruta | Descripción |
+|--------|------|-------------|
+| Login | `/login` | Autenticación con usuario/contraseña (sesión cookie, 8h). |
+| Simulación | `/` | Canvas interactivo con zoom/pan, controles para iniciar/detener simulaciones, tablas de robots y pedidos en tiempo real, animación suave a 60 fps. |
+| Métricas | `/metricas-page` | Comparación de corridas guardadas: selección de runs, checkboxes de métricas, gráfica horizontal (Chart.js), tabla de detalle con Δ valor/%. |
+
+### API REST
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check. |
+| `GET` | `/layout?escenario=` | Devuelve grid + estaciones + anaqueles. |
+| `GET` | `/robots?escenario=` | Lista robots activos. |
+| `POST` | `/robots` | Crear robot. |
+| `DELETE` | `/robots/{id}` | Desactivar robot. |
+| `GET` | `/pedidos/{n}?escenario=&seed=` | Generar pedidos. |
+| `POST` | `/simulacion/iniciar` | Iniciar simulación (hilo de fondo). |
+| `POST` | `/simulacion/detener` | Detener simulación activa. |
+| `GET` | `/simulacion/estado` | Polling de estado (posiciones, pedidos, tick). |
+| `GET` | `/simulacion/metricas?guardar=&nombre=` | Métricas parciales/finales; opcionalmente guarda en BD. |
+| `GET` | `/metricas/runs?escenario=` | Lista corridas guardadas. |
+| `GET` | `/metricas/disponibles` | Métricas disponibles para comparar. |
+| `POST` | `/metricas/comparar` | Compara dos runs (body JSON). |
+| `POST` | `/login` | Autenticación (form). |
+| `GET` | `/logout` | Cierra sesión. |
+
+### Base de datos (Azure SQL)
+Las métricas de cada corrida se persisten en la tabla `runs` de Azure SQL. Al marcar la casilla **"Guardar métricas al finalizar"** antes de iniciar una simulación, el sistema guarda automáticamente las métricas completas una vez que la simulación termina. Se puede asignar un nombre personalizado a cada corrida.
+
+## 8. Reproducibilidad
 El sistema es determinista al fijar el `--seed` durante la generación del layout y al reutilizar los artefactos asociados a un mismo `--escenario`.
 
 Esto permite:
@@ -233,7 +309,7 @@ Esto permite:
 - comparar estrategias,
 - evaluar mejoras de forma justa.
 
-## 7.1 Comparar métricas vs benchmark
+## 8.1 Comparar métricas vs benchmark
 Para comparar visualmente las métricas actuales contra el benchmark base:
 
 ```bash
@@ -246,7 +322,7 @@ El script:
 - muestra el cambio absoluto y porcentual,
 - guarda un PNG de comparación en `outputs/<escenario>/comparacion_vs_benchmark.png`.
 
-## 8. Uso académico
+## 9. Uso académico
 Este benchmark está diseñado como **reto integrador** para equipos multidisciplinarios:
 
 - **IRS**: navegación, abstracción robótica, interacción humano-robot.
@@ -259,7 +335,7 @@ Los estudiantes pueden:
 - introducir fallas o restricciones,
 - medir su impacto en métricas globales.
 
-## 9. Filosofía de diseño
+## 10. Filosofía de diseño
 Este es un proyecto vivo. Aunque el benchmark es funcional y permite ejecutar experimentos reproducibles, no se considera una implementación final ni pulida, sino una base en evolución, diseñada para ser extendida, refinada y mejorada a lo largo del tiempo.
 
 El sistema separa deliberadamente **políticas** de **mecanismos**.
@@ -269,7 +345,7 @@ Esto da lugar a un **caso de estudio deliberadamente subóptimo**, pero técnica
 - discutir trade-offs operativos de manera informada,
 - proponer mejoras sustentadas en métricas y razonamiento de ingeniería.
 
-## 10. Glosario
+## 11. Glosario
 **Asignación de pedidos**: Proceso mediante el cual un pedido se asigna a un robot disponible. En la implementación de referencia, esta asignación se realiza mediante decisiones locales inmediatas, sin optimización global.
 
 **Benchmark**: Implementación de referencia diseñada para comparar estrategias de decisión bajo condiciones controladas y reproducibles. No representa una solución óptima ni un sistema industrial.
