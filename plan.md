@@ -49,15 +49,21 @@ Calcula por robot: ticks_restantes = len(ruta) - idx_ruta
 - Columna ETA en tabla de robots: "--" | "En destino" | "~Xs"
 - Polling cada 2 segundos a /simulacion/estado
 
-### [ ] 8. Configuración — `.env` + `.gitignore`
+### [x] 8. Configuración — `.env` + `.gitignore`
 python-dotenv para connection string Azure SQL y config general.
 
-### [ ] 9. Dependencias — `requirements.txt`
-Agregar: fastapi, uvicorn, pyodbc, python-dotenv
+### [x] 9. Dependencias — `requirements.txt`
+Agregar: fastapi, uvicorn, pyodbc, python-dotenv, gunicorn
 
 ### [ ] 10. Deploy — Azure App Service
-Procfile o startup.sh con: uvicorn api.main:app
-Layout estático y JSONs van como archivos del App Service.
+- `startup.sh` con gunicorn + UvicornWorker
+- `.github/workflows/deploy.yml` para CI/CD con GitHub Actions
+- Variables de entorno en App Service: DB_CONNECTION_STRING (con Driver 18),
+  ADMIN_USER, ADMIN_PASSWORD, SECRET_KEY
+- outputs/ ahora incluido en el repo (quitado de .gitignore)
+- Requiere: crear App Service Linux Python 3.11, descargar Publish Profile,
+  agregarlo como secreto `AZURE_WEBAPP_PUBLISH_PROFILE` en GitHub,
+  y agregar variable `AZURE_WEBAPP_NAME` en GitHub
 
 ## Verificación final
 1. uvicorn api.main:app --reload  (local)

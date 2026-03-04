@@ -8,7 +8,8 @@ const CELL_SIZE = 3;       // píxeles por celda en la imagen de fondo
 const POLL_MS = 2000;
 const COLORS = { 0: '#1a1a2e', 1: '#2c3e50', 2: '#e65100', 3: '#263238' };
 const ROBOT_COLORS = {
-  INACTIVO: '#666', A_RECOGER: '#00e676', A_ESTACION: '#ff9100', RETORNO: '#aa00ff'
+  INACTIVO: '#666', A_RECOGER: '#00e676', A_ESTACION: '#ff9100', RETORNO: '#aa00ff',
+  A_CARGA: '#d62728', EN_CARGA: '#9467bd'
 };
 
 let grid = null;
@@ -44,6 +45,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   resizeCanvas();
   window.addEventListener('resize', () => { resizeCanvas(); renderFrame(lastEstado?.robots || []); });
 
+  await cargarEscenarios();
   await cargarLayout();
   await cargarRobotsDB();
   iniciarPolling();
@@ -149,6 +151,20 @@ function zoomReset() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  ESCENARIOS
+// ═══════════════════════════════════════════════════════════════
+async function cargarEscenarios() {
+  try {
+    const r = await fetch(`${API}/layout/escenarios`);
+    const lista = await r.json();
+    const sel = document.getElementById('selEscenario');
+    sel.innerHTML = lista.map(e =>
+      `<option value="${e.value}">${e.label}</option>`
+    ).join('');
+  } catch (e) { console.error('Error cargando escenarios', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  LAYOUT
 // ═══════════════════════════════════════════════════════════════
 async function cargarLayout() {
@@ -206,16 +222,22 @@ function renderListaRobots() {
 
 async function crearRobot() {
   const nombre = document.getElementById('inRobotNombre').value || `Robot-${Date.now() % 1000}`;
-  const spawn_x = parseInt(document.getElementById('inSpawnX').value) || 0;
-  const spawn_y = parseInt(document.getElementById('inSpawnY').value) || 0;
   try {
-    await fetch(`${API}/robots`, {
+    const r = await fetch(`${API}/robots`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nombre, escenario: esc(), spawn_x, spawn_y })
+      body: JSON.stringify({ nombre, escenario: esc() })
     });
+    if (!r.ok) {
+      const err = await r.json();
+      const msg = typeof err.detail === 'string'
+        ? err.detail
+        : Array.isArray(err.detail)
+          ? err.detail.map(e => e.msg || JSON.stringify(e)).join('; ')
+          : JSON.stringify(err.detail);
+      alert(msg || 'Error creando robot');
+      return;
+    }
     document.getElementById('inRobotNombre').value = '';
-    document.getElementById('inSpawnX').value = '';
-    document.getElementById('inSpawnY').value = '';
     await cargarRobotsDB();
   } catch (e) { alert('Error creando robot: ' + e); }
 }
@@ -355,6 +377,34 @@ function actualizarUI(data) {
 }
 
 // ── Animation loop (60 fps) ─────────────────────────────────────
+// Manhattan interpolation: move along one axis at a time (no diagonals)
+function manhattanLerp(prev, curr, t) {
+  const dx = curr.x - prev.x;
+  const dy = curr.y - prev.y;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+  const totalDist = absDx + absDy;
+
+  if (totalDist === 0) return { x: curr.x, y: curr.y };
+
+  // Distance covered so far along the Manhattan path
+  const covered = t * totalDist;
+
+  if (covered <= absDx) {
+    // Still moving along X axis
+    return {
+      x: prev.x + Math.sign(dx) * covered,
+      y: prev.y,
+    };
+  } else {
+    // Done with X, now moving along Y axis
+    return {
+      x: curr.x,
+      y: prev.y + Math.sign(dy) * (covered - absDx),
+    };
+  }
+}
+
 function animationLoop() {
   const now = performance.now();
   const elapsed = now - lerpStart;
@@ -366,10 +416,11 @@ function animationLoop() {
   for (const id in currPositions) {
     const curr = currPositions[id];
     const prev = prevPositions[id] || curr;
+    const pos = manhattanLerp(prev, curr, ease);
     interpolated.push({
       robot_id: parseInt(id),
-      pos_x: prev.x + (curr.x - prev.x) * ease,
-      pos_y: prev.y + (curr.y - prev.y) * ease,
+      pos_x: pos.x,
+      pos_y: pos.y,
       estado: curr.estado,
       pedido_id: curr.pedido_id,
       ticks_restantes: curr.ticks_restantes,
@@ -420,8 +471,11 @@ function renderTablaRobots(robots) {
     const badgeClass = r.estado === 'INACTIVO' ? 'badge-inactivo'
       : r.estado === 'A_RECOGER' ? 'badge-recoger'
       : r.estado === 'A_ESTACION' ? 'badge-estacion'
+      : r.estado === 'A_CARGA' ? 'badge-carga'
+      : r.estado === 'EN_CARGA' ? 'badge-encarga'
       : 'badge-retorno';
     const eta = r.estado === 'INACTIVO' ? '--'
+      : r.estado === 'EN_CARGA' ? '🔋 Cargando'
       : r.ticks_restantes === 0 ? 'En destino'
       : `~${r.eta_seg}s (${r.ticks_restantes}t)`;
     return `<tr>
@@ -473,6 +527,7 @@ function mostrarTooltip(e) {
   if (robot) {
     const nombre = robotsDB.find(db => db.robot_id === robot.robot_id + (robotsDB[0]?.robot_id || 0))?.nombre || `Robot ${robot.robot_id}`;
     const eta = robot.estado === 'INACTIVO' ? 'Inactivo'
+      : robot.estado === 'EN_CARGA' ? '🔋 Cargando'
       : robot.ticks_restantes === 0 ? 'En destino'
       : `ETA: ~${robot.eta_seg}s (${robot.ticks_restantes} ticks)`;
     tooltip.innerHTML = `<strong>${nombre}</strong><br>

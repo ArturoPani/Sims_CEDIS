@@ -1,12 +1,24 @@
 """
 Router de simulación — iniciar, detener, consultar estado y métricas.
 """
+import json
+import os
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from api.sim_runner import runner
-from sim_core import Pedido
+from sim_core import Pedido, SimConfig
 from db import crud
+
+# ── Configuración de features por escenario ────────────────────
+CONFIG_ESCENARIOS: dict[str, SimConfig] = {
+    "benchmark":        SimConfig(usar_bateria=False),          # lógica original
+    "pasillosDirigidos": SimConfig(usar_bateria=True),           # batería + relevos
+}
+
+def _config_para(escenario: str) -> SimConfig:
+    """Devuelve la SimConfig del escenario, o defaults (benchmark) si no existe."""
+    return CONFIG_ESCENARIOS.get(escenario, SimConfig())
 
 router = APIRouter(prefix="/simulacion", tags=["Simulación"])
 
@@ -18,6 +30,51 @@ class IniciarSimIn(BaseModel):
     seed: int = 42
     ticks: int = 10000
     seg_por_tick: float = 0.05
+
+
+# ── Helpers ──────────────────────────────────────────────────────
+
+def _cargar_politica_transito(escenario: str):
+    """
+    Carga politica_transito.json del escenario y convierte las claves
+    de strings JSON a tuplas que espera sim_core / a_estrella.
+    Devuelve (movimientos_permitidos, costos_direccion, celdas_no_stop)
+    o (None, None, None) si el archivo no existe.
+    """
+    ruta = os.path.join("outputs", escenario, "politica_transito.json")
+    if not os.path.isfile(ruta):
+        return None, None, None
+
+    with open(ruta, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # movimientos: "x,y" -> [(dx,dy), ...]  →  (x,y) -> [(dx,dy), ...]
+    raw_mov = data.get("movimientos", {})
+    movimientos = {}
+    for key_str, dirs in raw_mov.items():
+        parts = key_str.split(",")
+        celda = (int(parts[0]), int(parts[1]))
+        movimientos[celda] = [tuple(d) for d in dirs]
+
+    # costos_direccion: "x,y,dx,dy" -> float  →  (x,y,dx,dy) -> float
+    raw_cos = data.get("costos_direccion", {})
+    costos = {}
+    for key_str, costo in raw_cos.items():
+        parts = key_str.split(",")
+        costos[(int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3]))] = float(costo)
+
+    # no_stop: ["x,y", ...]  →  {(x,y), ...}
+    raw_ns = data.get("no_stop", [])
+    no_stop = set()
+    for key_str in raw_ns:
+        parts = key_str.split(",")
+        no_stop.add((int(parts[0]), int(parts[1])))
+
+    return (
+        movimientos if movimientos else None,
+        costos if costos else None,
+        no_stop if no_stop else None,
+    )
 
 
 # ── Endpoints ────────────────────────────────────────────────────
@@ -59,6 +116,8 @@ def iniciar_simulacion(params: IniciarSimIn):
     ]
 
     try:
+        movimientos, costos, no_stop = _cargar_politica_transito(params.escenario)
+        cfg = _config_para(params.escenario)
         runner.iniciar(
             escenario=params.escenario,
             seed=params.seed,
@@ -67,6 +126,10 @@ def iniciar_simulacion(params: IniciarSimIn):
             puntos_spawn=puntos_spawn,
             num_robots=num_robots,
             seg_por_tick=params.seg_por_tick,
+            movimientos_permitidos=movimientos,
+            costos_direccion=costos,
+            celdas_no_stop=no_stop,
+            config=cfg,
         )
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e))

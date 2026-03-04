@@ -32,6 +32,7 @@ COLUMNAS_RUNS = [
     "deadlock",
     "eventos_alto",
     "distancia_total_celdas",
+    "relevos",
 ]
 
 # Mapeo de nombre de columna DB → clave usada en comparar_metricas

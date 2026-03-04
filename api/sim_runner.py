@@ -7,7 +7,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from sim_core import Pedido, SimAlmacen, cargar_layout
+from sim_core import Pedido, SimAlmacen, SimConfig, cargar_layout
 
 
 @dataclass
@@ -63,6 +63,7 @@ class SimRunner:
         movimientos_permitidos=None,
         costos_direccion=None,
         celdas_no_stop=None,
+        config: Optional["SimConfig"] = None,
     ) -> None:
         if self._corriendo:
             raise RuntimeError("Ya hay una simulación en curso.")
@@ -85,6 +86,7 @@ class SimRunner:
             movimientos_permitidos=movimientos_permitidos,
             costos_direccion=costos_direccion,
             celdas_no_stop=celdas_no_stop,
+            config=config,
         )
 
         with self._lock:

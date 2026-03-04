@@ -150,10 +150,10 @@ def guardar_run(escenario: str, metricas: Dict) -> int:
                 tiempo_promedio_pedido_ticks, throughput_pedidos_por_1000t,
                 tiempo_promedio_espera_ticks, utilizacion_promedio,
                 colisiones_vertice, intercambios_arista,
-                deadlock, eventos_alto, distancia_total_celdas
+                deadlock, eventos_alto, distancia_total_celdas, relevos
             )
             OUTPUT INSERTED.run_id
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 escenario,
@@ -171,6 +171,7 @@ def guardar_run(escenario: str, metricas: Dict) -> int:
                 metricas.get("deadlock"),
                 metricas.get("eventos_alto"),
                 metricas.get("distancia_total_celdas"),
+                metricas.get("relevos", 0),
             ),
         )
         run_id = cursor.fetchone()[0]
@@ -191,7 +192,7 @@ def listar_runs(escenario: Optional[str] = None) -> List[Dict]:
                    tiempo_promedio_pedido_ticks, throughput_pedidos_por_1000t,
                    tiempo_promedio_espera_ticks, utilizacion_promedio,
                    colisiones_vertice, intercambios_arista,
-                   deadlock, eventos_alto, distancia_total_celdas
+                   deadlock, eventos_alto, distancia_total_celdas, relevos
             FROM runs
         """
         params: list = []

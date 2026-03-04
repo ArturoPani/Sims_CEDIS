@@ -8,6 +8,23 @@ import numpy as np
 from a_estrella import a_estrella
 from tabla_reservas import TablaReservas
 
+
+# ── Configuración por escenario ──────────────────────────────────
+
+@dataclass
+class SimConfig:
+    """Feature flags para controlar qué lógica se aplica en la simulación.
+
+    usar_bateria = False  →  lógica original del benchmark (main).
+    usar_bateria = True   →  turnos, carga, relevos, estacionamiento
+                             proporcional (rama Diego / Mejora).
+
+    Pasillos dirigidos se controlan aparte con movimientos_permitidos
+    (None = movimiento libre en 4 direcciones).
+    """
+    usar_bateria: bool = False
+    duracion_turno: int = 7200  # solo si usar_bateria=True
+
 LIBRE = 0
 ESTACION = 2
 
@@ -119,7 +136,6 @@ def elegir_objetivo_adyacente(grid: np.ndarray, celda_anaquel: Celda) -> Optiona
     return None
 
 class SimAlmacen:
-    DURACION_TURNO: int = 7200  # 2 horas simuladas (ticks)
 
     def __init__(
         self,
@@ -133,7 +149,9 @@ class SimAlmacen:
         movimientos_permitidos: Optional[Dict] = None,
         costos_direccion: Optional[Dict] = None,
         celdas_no_stop: Optional[set] = None,
+        config: Optional["SimConfig"] = None,
     ):
+        self.config = config or SimConfig()  # por defecto = benchmark
         self.grid = grid
         self.estacion_dock = estacion_dock
         self.anaquel_home = anaquel_home
@@ -148,7 +166,7 @@ class SimAlmacen:
 
         self.tabla_reservas = TablaReservas()
 
-        # Cola de robots descansados y contador de relevos
+        # Cola de robots descansados y contador de relevos (solo batería)
         self._cola_descansados: deque = deque()
         self.relevo_count: int = 0
 
@@ -156,13 +174,17 @@ class SimAlmacen:
         if len(puntos_spawn) < robots:
             raise RuntimeError("No hay suficientes puntos de spawn para la cantidad de robots.")
 
-        paso_escalonado = self.DURACION_TURNO // max(robots, 1)
-
         self.lista_robots: List[Robot] = []
-        for i in range(robots):
-            r = Robot(robot_id=i, pos=puntos_spawn[i], spawn_home=puntos_spawn[i])
-            r.tick_inicio_turno = i * paso_escalonado
-            self.lista_robots.append(r)
+
+        if self.config.usar_bateria:
+            paso_escalonado = self.config.duracion_turno // max(robots, 1)
+            for i in range(robots):
+                r = Robot(robot_id=i, pos=puntos_spawn[i], spawn_home=puntos_spawn[i])
+                r.tick_inicio_turno = i * paso_escalonado
+                self.lista_robots.append(r)
+        else:
+            for i in range(robots):
+                self.lista_robots.append(Robot(robot_id=i, pos=puntos_spawn[i]))
 
         # Reservar posiciones iniciales en tick 0
         for r in self.lista_robots:
@@ -185,7 +207,10 @@ class SimAlmacen:
 
     def _asignar_pedidos(self) -> None:
         # Greedy: para cada robot inactivo, asignar el anaquel más cercano a una celda adyacente de recolección
-        inactivos = [r for r in self.lista_robots if r.estado == "INACTIVO" and not r.necesita_carga]
+        if self.config.usar_bateria:
+            inactivos = [r for r in self.lista_robots if r.estado == "INACTIVO" and not r.necesita_carga]
+        else:
+            inactivos = [r for r in self.lista_robots if r.estado == "INACTIVO"]
         if (not inactivos) or (not self.pendientes):
             return
 
@@ -248,10 +273,11 @@ class SimAlmacen:
             r.idx_ruta = 0
 
     def _gestionar_carga(self) -> None:
+        """Solo se llama cuando config.usar_bateria=True."""
         for r in self.lista_robots:
             if r.estado in ("EN_CARGA", "A_CARGA"):
                 continue
-            if not r.necesita_carga and self.tick - r.tick_inicio_turno >= self.DURACION_TURNO:
+            if not r.necesita_carga and self.tick - r.tick_inicio_turno >= self.config.duracion_turno:
                 r.necesita_carga = True
             if r.estado == "INACTIVO" and r.necesita_carga:
                 ruta = a_estrella(self.grid, r.pos, r.spawn_home)
@@ -324,7 +350,7 @@ class SimAlmacen:
             r.ruta = []
             r.idx_ruta = 0
 
-            if r.necesita_carga:
+            if self.config.usar_bateria and r.necesita_carga:
                 ruta = a_estrella(self.grid, r.pos, r.spawn_home)
                 r.estado = "A_CARGA"
                 r.ruta = ruta if ruta else []
@@ -333,6 +359,7 @@ class SimAlmacen:
                 r.estado = "INACTIVO"
 
         elif r.estado == "A_CARGA":
+            # Solo alcanzable si usar_bateria=True
             r.estado = "EN_CARGA"
             r.necesita_carga = False
             r.ruta = []
@@ -341,18 +368,20 @@ class SimAlmacen:
 
     def step(self) -> None:
         self._liberar_pedidos()
-        self._gestionar_carga()
+        if self.config.usar_bateria:
+            self._gestionar_carga()
         self._asignar_pedidos()
 
         # Proponer movimientos
         propuestas: Dict[int, Celda] = {}
+        estados_idle = ("INACTIVO", "EN_CARGA") if self.config.usar_bateria else ("INACTIVO",)
         for r in self.lista_robots:
-            if r.estado not in ("INACTIVO", "EN_CARGA"):
+            if r.estado not in estados_idle:
                 r.ticks_ocupado += 1
 
             self._planear_siguiente_tramo_si_llego(r)
 
-            if r.estado in ("INACTIVO", "EN_CARGA") or (not r.ruta):
+            if r.estado in estados_idle or (not r.ruta):
                 propuestas[r.robot_id] = r.pos
                 continue
 

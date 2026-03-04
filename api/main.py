@@ -53,12 +53,14 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, max_age=3600 * 8)
 from api.routers import robots, pedidos, simulacion, layout
 from api.routers.metricas_router import router as metricas_router
 from api.routers.auth import router as auth_router
+from api.routers.experimento import router as experimento_router
 app.include_router(auth_router)
 app.include_router(robots.router)
 app.include_router(pedidos.router)
 app.include_router(simulacion.router)
 app.include_router(layout.router)
 app.include_router(metricas_router)
+app.include_router(experimento_router)
 
 # ── Servir frontend estático ─────────────────────────────────────
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend")
@@ -90,6 +92,14 @@ def metricas_page():
     if os.path.isfile(path):
         return FileResponse(path)
     raise Exception("metricas.html not found")
+
+@app.get("/experimento-page")
+def experimento_page():
+    """Sirve la página de experimento rápido."""
+    path = os.path.join(FRONTEND_DIR, "experimento.html")
+    if os.path.isfile(path):
+        return FileResponse(path)
+    raise Exception("experimento.html not found")
 
 @app.get("/health")
 def health():

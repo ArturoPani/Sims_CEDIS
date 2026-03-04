@@ -8,6 +8,29 @@ from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/layout", tags=["Layout"])
 
+# Mapeo de nombre de carpeta → nombre visible
+NOMBRES_ESCENARIOS = {
+    "benchmark": "Benchmark",
+    "pasillosDirigidos": "Mejora",
+}
+
+
+@router.get("/escenarios")
+def listar_escenarios():
+    """Devuelve las carpetas de escenarios disponibles en outputs/."""
+    carpeta = "outputs"
+    if not os.path.isdir(carpeta):
+        return []
+    escenarios = []
+    for nombre in sorted(os.listdir(carpeta)):
+        ruta = os.path.join(carpeta, nombre)
+        if os.path.isdir(ruta) and os.path.isfile(os.path.join(ruta, "layout.npy")):
+            escenarios.append({
+                "value": nombre,
+                "label": NOMBRES_ESCENARIOS.get(nombre, nombre),
+            })
+    return escenarios
+
 
 @router.get("")
 def obtener_layout(

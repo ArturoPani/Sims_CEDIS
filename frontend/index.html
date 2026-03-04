@@ -18,15 +18,15 @@
     <a href="/metricas-page" style="color:#aaa; text-decoration:none; padding:4px 12px; border:1px solid #0f3460; border-radius:4px; font-size:12px;">
       📊 Métricas
     </a>
+    <a href="/experimento-page" style="color:#aaa; text-decoration:none; padding:4px 12px; border:1px solid #0f3460; border-radius:4px; font-size:12px;">
+      🧪 Experimento
+    </a>
     <a href="/logout" style="color:#ff5252; text-decoration:none; padding:4px 12px; border:1px solid #ff525244; border-radius:4px; font-size:12px; margin-left:auto;">
       🚪 Salir
     </a>
   </nav>
   <label>Escenario:
-    <select id="selEscenario">
-      <option value="benchmark">benchmark</option>
-      <option value="pasillosDirigidos">pasillosDirigidos</option>
-    </select>
+    <select id="selEscenario"></select>
   </label>
   <span><span class="status-dot off" id="dotStatus"></span> <span id="txtStatus">Desconectado</span></span>
   <span id="txtTick" style="margin-left:auto; color:#00d4ff;"></span>
@@ -44,16 +44,6 @@
       <div class="form-group">
         <label for="inRobotNombre">Nombre del robot</label>
         <input id="inRobotNombre" placeholder="Ej: Robot-A1">
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label for="inSpawnX">Columna (X)</label>
-          <input id="inSpawnX" type="number" placeholder="Ej: 5" min="0">
-        </div>
-        <div class="form-group">
-          <label for="inSpawnY">Fila (Y)</label>
-          <input id="inSpawnY" type="number" placeholder="Ej: 293" min="0">
-        </div>
       </div>
       <button onclick="crearRobot()">+ Agregar Robot</button>
       <div id="listaRobots" style="margin-top:10px; font-size:12px;"></div>

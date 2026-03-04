@@ -30,6 +30,7 @@ def _direccion_metricas() -> Dict[str, str]:
         "distancia_total_celdas": "lower",
         "colisiones_vertice": "lower",
         "intercambios_arista": "lower",
+        "relevos": "neutral",
     }
 
 
@@ -64,6 +65,7 @@ def _etiqueta_metrica(metrica: str) -> str:
         "distancia_total_celdas": "Distancia",
         "colisiones_vertice": "Col. vértice",
         "intercambios_arista": "Interc. arista",
+        "relevos": "Relevos",
     }
     return nombres.get(metrica, metrica.replace("_", " ").capitalize())
 
