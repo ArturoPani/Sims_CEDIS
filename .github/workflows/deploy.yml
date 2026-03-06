@@ -3,7 +3,7 @@ name: Deploy to Azure App Service
 on:
   push:
     branches: [main]
-  workflow_dispatch:           # permite deploy manual desde GitHub
+  workflow_dispatch:
 
 env:
   PYTHON_VERSION: '3.11'
@@ -14,24 +14,22 @@ jobs:
     environment: Production
 
     steps:
-      # ── Checkout ──
       - uses: actions/checkout@v4
 
-      # ── Python ──
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # ── Dependencias ──
-      - name: Install dependencies
+      - name: Create deployment package
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          zip -r release.zip . \
+            -x ".git/*" ".github/*" ".venv/*" "__pycache__/*" \
+               "*.pyc" ".env" "pruebas/*" "outputs/seed12/*"
 
-      # ── Deploy ──
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ vars.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: release.zip
