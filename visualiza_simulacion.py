@@ -2,7 +2,8 @@
 import argparse
 import json
 import os
-from typing import List, Tuple, Dict
+import shutil
+from typing import List, Tuple, Dict, Optional
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -11,17 +12,38 @@ from out_paths import asegurar_dirs_de_salidas
 from sim_core import Pedido, SimAlmacen, cargar_layout
 from pasillos_dirigidos import cargar_politica, politica_a_restricciones
 
-# ======== FFMPEG PATH ============================================
-# Ruta fija, eventualmente se agregará el switch --ffmpeg_path.
-mpl.rcParams["animation.ffmpeg_path"] = "/usr/bin/ffmpeg"
-# =================================================================
-
 LIBRE = 0
 ANAQUEL = 1
 ESTACION = 2
 BLOQUEADO = 3
 
 Celda = Tuple[int, int]
+
+
+def _resolver_ffmpeg_path(ffmpeg_path_cli: Optional[str]) -> Optional[str]:
+    """
+    Resuelve la ruta a ffmpeg en este orden:
+    1) --ffmpeg_path explícito
+    2) variable de entorno FFMPEG_PATH
+    3) binario local del repo (ffmpeg-8.0.1-essentials_build/bin/ffmpeg.exe)
+    4) ffmpeg en PATH del sistema
+    """
+    candidatos: List[Optional[str]] = [
+        ffmpeg_path_cli,
+        os.environ.get("FFMPEG_PATH"),
+        os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "ffmpeg-8.0.1-essentials_build",
+            "bin",
+            "ffmpeg.exe",
+        ),
+        shutil.which("ffmpeg"),
+    ]
+    for ruta in candidatos:
+        if ruta and os.path.isfile(ruta):
+            return ruta
+    return None
+
 
 def _ruta_por_escenario(escenario: str, nombre_archivo: str) -> str:
     return os.path.join("outputs", escenario, nombre_archivo)
@@ -255,6 +277,11 @@ def animar(
     if salida_video.lower().endswith(".gif"):
         anim.save(salida_video, writer=animation.PillowWriter(fps=fps))
     else:
+        if not animation.FFMpegWriter.isAvailable():
+            raise RuntimeError(
+                "FFmpeg no está disponible para Matplotlib. "
+                "Pasa --ffmpeg_path <ruta_a_ffmpeg.exe> o usa salida .gif."
+            )
         Writer = animation.writers["ffmpeg"]
         writer = Writer(fps=fps, metadata={"artist": "sim_almacen"}, bitrate=1800)
         anim.save(salida_video, writer=writer)
@@ -304,8 +331,9 @@ def main():
 
     args = ap.parse_args()
 
-    if args.ffmpeg_path:
-        mpl.rcParams["animation.ffmpeg_path"] = args.ffmpeg_path
+    ffmpeg_path = _resolver_ffmpeg_path(args.ffmpeg_path)
+    if ffmpeg_path:
+        mpl.rcParams["animation.ffmpeg_path"] = ffmpeg_path
 
     # Entradas por escenario si no se dieron explícitamente
     ruta_layout = args.layout or _ruta_por_escenario(args.escenario, "layout.npy")
