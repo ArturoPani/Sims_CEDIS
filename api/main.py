@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp, Receive, Scope, Send
 from dotenv import load_dotenv
 import os
 
@@ -19,23 +19,40 @@ SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
 RUTAS_PUBLICAS = {"/login", "/health", "/docs", "/openapi.json", "/redoc"}
 
 
-class AuthGuardMiddleware(BaseHTTPMiddleware):
-    """Redirige a /login si no hay sesión activa, excepto rutas públicas."""
+class AuthGuardMiddleware:
+    """Middleware ASGI puro: redirige a /login si no hay sesión activa."""
 
-    async def dispatch(self, request: Request, call_next):
-        path = request.url.path
+    def __init__(self, app: ASGIApp):
+        self.app = app
 
-        # Permitir siempre: rutas públicas y estáticos
-        if path in RUTAS_PUBLICAS or path.startswith("/static/"):
-            return await call_next(request)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        if not request.session.get("user"):
-            accept = request.headers.get("accept", "")
-            if "text/html" not in accept:
-                return JSONResponse({"detail": "No autenticado"}, status_code=401)
-            return RedirectResponse(url="/login", status_code=303)
+        path: str = scope.get("path", "")
 
-        return await call_next(request)
+        # Permitir rutas públicas y estáticos (excepto .html)
+        if path in RUTAS_PUBLICAS:
+            await self.app(scope, receive, send)
+            return
+        if path.startswith("/static/") and not path.endswith(".html"):
+            await self.app(scope, receive, send)
+            return
+
+        # Verificar sesión
+        session = scope.get("session", {})
+        if not session.get("user"):
+            headers_raw = dict(scope.get("headers", []))
+            accept = headers_raw.get(b"accept", b"").decode("latin-1", errors="ignore")
+            if "text/html" in accept:
+                response = RedirectResponse(url="/login", status_code=303)
+            else:
+                response = JSONResponse({"detail": "No autenticado"}, status_code=401)
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
 
 
 app = FastAPI(
