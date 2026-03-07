@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CEDIS Sim · Login</title>
+  <title>CEDIS Sim · Registro</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -65,7 +65,7 @@
       border-color: #00d4ff;
       box-shadow: 0 0 0 3px #00d4ff22;
     }
-    .btn-login {
+    .btn-register {
       width: 100%;
       padding: 12px;
       background: linear-gradient(135deg, #0f7b6c, #1a9e8f);
@@ -78,7 +78,7 @@
       transition: opacity 0.2s;
       margin-top: 6px;
     }
-    .btn-login:hover { opacity: 0.88; }
+    .btn-register:hover { opacity: 0.88; }
     .error-msg {
       background: #ff525222;
       border: 1px solid #ff525255;
@@ -94,37 +94,52 @@
       font-size: 36px;
       margin-bottom: 12px;
     }
+    .link-login {
+      display: block;
+      text-align: center;
+      margin-top: 18px;
+      color: #00d4ff;
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .link-login:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
   <div class="login-card">
-    <div class="lock-icon">🔒</div>
+    <div class="lock-icon">📝</div>
     <h1>CEDIS Sim</h1>
-    <p class="subtitle">Acceso restringido · Solo administradores</p>
+    <p class="subtitle">Crear cuenta nueva</p>
 
-    <div id="errorBox" class="error-msg" style="display:none;">
-      Usuario o contraseña incorrectos
-    </div>
+    <div id="errorBox" class="error-msg" style="display:none;"></div>
 
-    <form action="/login" method="POST">
+    <form action="/register" method="POST">
       <div class="form-group">
         <label for="username">Usuario</label>
-        <input type="text" id="username" name="username" placeholder="admin" autocomplete="username" required autofocus />
+        <input type="text" id="username" name="username" placeholder="Tu nombre de usuario" autocomplete="username" required autofocus />
       </div>
       <div class="form-group">
         <label for="password">Contraseña</label>
-        <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required />
+        <input type="password" id="password" name="password" placeholder="Mínimo 4 caracteres" autocomplete="new-password" required minlength="4" />
       </div>
-      <button type="submit" class="btn-login">Iniciar sesión</button>
+      <button type="submit" class="btn-register">Crear cuenta</button>
     </form>
 
-
+    <a href="/login" class="link-login">¿Ya tienes cuenta? Inicia sesión</a>
   </div>
 
   <script>
-    // Mostrar error si viene de un intento fallido
-    if (new URLSearchParams(window.location.search).get('error')) {
-      document.getElementById('errorBox').style.display = 'block';
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('error');
+    if (err) {
+      const box = document.getElementById('errorBox');
+      const msgs = {
+        validacion: 'El usuario no puede estar vacío y la contraseña debe tener al menos 4 caracteres.',
+        existe: 'Ese nombre de usuario ya está registrado.',
+        servidor: 'Error del servidor. Intenta de nuevo.',
+      };
+      box.textContent = msgs[err] || 'Error desconocido.';
+      box.style.display = 'block';
     }
   </script>
 </body>

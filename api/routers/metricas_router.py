@@ -2,7 +2,7 @@
 Endpoints para consulta y comparación de métricas de runs guardados en Azure SQL.
 Reutiliza la lógica de comparar_metricas.py sin depender de matplotlib.
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import List, Optional
 import sys, os, math
@@ -17,6 +17,7 @@ from comparar_metricas import (
     _etiqueta_metrica,
     _direccion_metricas,
 )
+from api.deps import get_current_user_id
 
 router = APIRouter(prefix="/metricas", tags=["metricas"])
 
@@ -60,10 +61,11 @@ def _run_a_dict_metricas(run: dict) -> dict:
 #  GET /metricas/runs
 # ════════════════════════════════════════════════════════════════
 @router.get("/runs")
-def get_runs(escenario: Optional[str] = Query(None)):
-    """Lista todas las corridas guardadas, opcionalmente filtradas por escenario."""
+def get_runs(request: Request, escenario: Optional[str] = Query(None)):
+    """Lista todas las corridas guardadas del usuario actual."""
     try:
-        runs = listar_runs(escenario)
+        uid = get_current_user_id(request)
+        runs = listar_runs(escenario, user_id=uid)
         return runs
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -97,10 +99,11 @@ class ComparacionRequest(BaseModel):
 
 
 @router.post("/comparar")
-def comparar(req: ComparacionRequest):
+def comparar(req: ComparacionRequest, request: Request):
     """Compara dos runs y devuelve resultados de evaluación."""
     try:
-        runs = listar_runs()
+        uid = get_current_user_id(request)
+        runs = listar_runs(user_id=uid)
         mapa = {r["run_id"]: r for r in runs}
 
         if req.run_id_base not in mapa:

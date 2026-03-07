@@ -58,6 +58,13 @@ app.include_router(auth_router)
 app.include_router(robots.router)
 app.include_router(pedidos.router)
 app.include_router(simulacion.router)
+
+# ── Crear tablas al iniciar (idempotente) ────────────────────────
+from db.connection import init_schema
+try:
+    init_schema()
+except Exception:
+    pass  # la BD puede no estar disponible en dev local
 app.include_router(layout.router)
 app.include_router(metricas_router)
 app.include_router(experimento_router)
@@ -75,6 +82,17 @@ def login_page():
     if os.path.isfile(path):
         return FileResponse(path)
     return {"error": "login.html not found"}
+
+
+@app.get("/admin")
+def admin_page(request: Request):
+    """Sirve la página de administración (solo admin)."""
+    if not request.session.get("is_admin"):
+        return RedirectResponse(url="/", status_code=303)
+    path = os.path.join(FRONTEND_DIR, "admin.html")
+    if os.path.isfile(path):
+        return FileResponse(path)
+    return {"error": "admin.html not found"}
 
 
 @app.get("/")

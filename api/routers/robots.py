@@ -3,10 +3,11 @@ Router de robots — alta, listado y baja de robots en la BD.
 """
 import json
 import os
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import Optional
 from db import crud
+from api.deps import get_current_user_id
 
 router = APIRouter(prefix="/robots", tags=["Robots"])
 
@@ -31,7 +32,7 @@ class RobotOut(BaseModel):
 
 # ── Helpers ──────────────────────────────────────────────────────
 
-def _siguiente_spawn(escenario: str) -> tuple[int, int]:
+def _siguiente_spawn(escenario: str, user_id: int) -> tuple[int, int]:
     """Devuelve el siguiente punto de spawn libre para el escenario."""
     ruta = os.path.join("outputs", escenario, "spawn.json")
     if not os.path.isfile(ruta):
@@ -39,8 +40,8 @@ def _siguiente_spawn(escenario: str) -> tuple[int, int]:
     with open(ruta, "r", encoding="utf-8") as f:
         todos_spawns = json.load(f)  # [[x,y], ...]
 
-    # Obtener spawns ya ocupados por robots activos
-    robots_activos = crud.listar_robots(escenario, solo_activos=True)
+    # Obtener spawns ya ocupados por robots activos del usuario
+    robots_activos = crud.listar_robots(escenario, solo_activos=True, user_id=user_id)
     ocupados = {(r["spawn_x"], r["spawn_y"]) for r in robots_activos}
 
     for sp in todos_spawns:
@@ -59,32 +60,37 @@ def _siguiente_spawn(escenario: str) -> tuple[int, int]:
 
 @router.get("", response_model=list[RobotOut])
 def listar_robots(
+    request: Request,
     escenario: str = Query(..., description="Nombre del escenario"),
     solo_activos: bool = Query(True, description="Filtrar solo robots activos"),
 ):
-    """Lista los robots registrados para un escenario."""
-    return crud.listar_robots(escenario, solo_activos=solo_activos)
+    """Lista los robots registrados para un escenario del usuario actual."""
+    uid = get_current_user_id(request)
+    return crud.listar_robots(escenario, solo_activos=solo_activos, user_id=uid)
 
 
 @router.get("/next-spawn")
-def siguiente_spawn(escenario: str = Query("benchmark")):
+def siguiente_spawn(request: Request, escenario: str = Query("benchmark")):
     """Devuelve el siguiente punto de spawn disponible."""
-    x, y = _siguiente_spawn(escenario)
+    uid = get_current_user_id(request)
+    x, y = _siguiente_spawn(escenario, uid)
     return {"spawn_x": x, "spawn_y": y}
 
 
 @router.post("", response_model=RobotOut, status_code=201)
-def crear_robot(robot: RobotIn):
+def crear_robot(robot: RobotIn, request: Request):
     """Da de alta un nuevo robot. Si no se envía spawn_x/y, se asigna automáticamente."""
+    uid = get_current_user_id(request)
     sx, sy = robot.spawn_x, robot.spawn_y
     if sx is None or sy is None:
-        sx, sy = _siguiente_spawn(robot.escenario)
+        sx, sy = _siguiente_spawn(robot.escenario, uid)
 
     robot_id = crud.insertar_robot(
         nombre=robot.nombre,
         escenario=robot.escenario,
         spawn_x=sx,
         spawn_y=sy,
+        user_id=uid,
     )
     return {
         "robot_id": robot_id,
@@ -97,9 +103,10 @@ def crear_robot(robot: RobotIn):
 
 
 @router.delete("/{robot_id}", status_code=200)
-def desactivar_robot(robot_id: int):
-    """Desactiva (baja lógica) un robot."""
-    eliminado = crud.desactivar_robot(robot_id)
+def desactivar_robot(robot_id: int, request: Request):
+    """Desactiva (baja lógica) un robot del usuario actual."""
+    uid = get_current_user_id(request)
+    eliminado = crud.desactivar_robot(robot_id, user_id=uid)
     if not eliminado:
         raise HTTPException(status_code=404, detail=f"Robot {robot_id} no encontrado.")
     return {"mensaje": f"Robot {robot_id} desactivado."}

@@ -8,12 +8,13 @@ import os
 from typing import Optional
 
 import numpy as np
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from sim_core import Pedido, SimAlmacen, SimConfig, cargar_layout
 from api.routers.simulacion import _cargar_politica_transito, CONFIG_ESCENARIOS
 from db import crud
+from api.deps import get_current_user_id
 
 router = APIRouter(prefix="/experimento", tags=["Experimento rápido"])
 
@@ -104,7 +105,7 @@ def _cargar_spawns(escenario: str, num_robots: int) -> list[tuple]:
 # ── Endpoint ─────────────────────────────────────────────────────
 
 @router.post("/correr")
-def correr_experimento(params: ExperimentoIn):
+def correr_experimento(params: ExperimentoIn, request: Request):
     """
     Corre una simulación completa de forma síncrona (sin hilo de fondo)
     y devuelve las métricas al terminar.
@@ -163,8 +164,9 @@ def correr_experimento(params: ExperimentoIn):
 
     # Guardar opcionalmente
     if params.guardar:
+        uid = get_current_user_id(request)
         etiqueta = (params.nombre or "").strip() or params.escenario
-        run_id = crud.guardar_run(etiqueta, metricas)
+        run_id = crud.guardar_run(etiqueta, metricas, user_id=uid)
         metricas["run_id"] = run_id
         metricas["guardado_en_bd"] = True
 

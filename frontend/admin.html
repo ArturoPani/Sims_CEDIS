@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CEDIS Sim — Administración</title>
+  <link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .admin-container { max-width: 700px; margin: 30px auto; padding: 0 20px; }
+    .admin-card {
+      background: #0d1b2a; border: 1px solid #1a3a5c; border-radius: 10px;
+      padding: 28px; margin-bottom: 24px;
+    }
+    .admin-card h2 { color: #00d4ff; margin: 0 0 18px 0; font-size: 18px; }
+    .form-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+    .form-row .field { display: flex; flex-direction: column; flex: 1; min-width: 140px; }
+    .form-row label { color: #8899aa; font-size: 12px; margin-bottom: 4px; }
+    .form-row input {
+      background: #0a1628; border: 1px solid #1a3a5c; border-radius: 6px;
+      color: #e0e6ed; padding: 8px 12px; font-size: 14px;
+    }
+    .form-row input:focus { border-color: #00d4ff; outline: none; }
+    .btn-crear {
+      background: #00d4ff; color: #0a0e17; border: none; border-radius: 6px;
+      padding: 9px 22px; font-weight: 700; font-size: 14px; cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn-crear:hover { background: #33dfff; }
+    .msg { margin-top: 12px; padding: 8px 14px; border-radius: 6px; font-size: 13px; display: none; }
+    .msg.ok { background: #0b3d2e; color: #4ade80; border: 1px solid #166534; display: block; }
+    .msg.err { background: #3b1111; color: #f87171; border: 1px solid #7f1d1d; display: block; }
+
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th { text-align: left; color: #8899aa; font-size: 12px; padding: 6px 10px; border-bottom: 1px solid #1a3a5c; }
+    td { color: #c8d6e5; font-size: 13px; padding: 8px 10px; border-bottom: 1px solid #0f2744; }
+    tr:hover td { background: #0f2744; }
+    .empty-msg { color: #556677; font-size: 13px; text-align: center; padding: 20px; }
+  </style>
+</head>
+<body>
+
+<!-- ═══ Top bar ═══ -->
+<div class="topbar">
+  <h1>CEDIS Sim</h1>
+  <nav style="display:flex; gap:6px;">
+    <a href="/" style="color:#aaa; text-decoration:none; padding:4px 12px; border:1px solid #0f3460; border-radius:4px; font-size:12px;">
+      🤖 Simulación
+    </a>
+    <a href="/metricas-page" style="color:#aaa; text-decoration:none; padding:4px 12px; border:1px solid #0f3460; border-radius:4px; font-size:12px;">
+      📊 Métricas
+    </a>
+    <a href="/experimento-page" style="color:#aaa; text-decoration:none; padding:4px 12px; border:1px solid #0f3460; border-radius:4px; font-size:12px;">
+      🧪 Experimento
+    </a>
+    <span style="color:#00d4ff; padding:4px 12px; border:1px solid #00d4ff33; border-radius:4px; font-size:12px; background:#0d2342;">
+      ⚙️ Admin
+    </span>
+    <span id="navUser" style="color:#8899aa; font-size:12px; margin-left:auto; padding:4px 10px;"></span>
+    <a href="/logout" style="color:#ff5252; text-decoration:none; padding:4px 12px; border:1px solid #ff525244; border-radius:4px; font-size:12px;">
+      🚪 Salir
+    </a>
+  </nav>
+</div>
+
+<div class="admin-container">
+
+  <!-- Crear usuario -->
+  <div class="admin-card">
+    <h2>➕ Crear usuario</h2>
+    <form id="formCrear" class="form-row">
+      <div class="field">
+        <label for="nuevoUser">Usuario</label>
+        <input type="text" id="nuevoUser" name="username" required autocomplete="off" placeholder="nombre_usuario" />
+      </div>
+      <div class="field">
+        <label for="nuevoPass">Contraseña</label>
+        <input type="password" id="nuevoPass" name="password" required autocomplete="new-password" placeholder="••••••••" />
+      </div>
+      <button type="submit" class="btn-crear">Crear</button>
+    </form>
+    <div id="msgCrear" class="msg"></div>
+  </div>
+
+  <!-- Lista de usuarios -->
+  <div class="admin-card">
+    <h2>👥 Usuarios registrados</h2>
+    <div id="tablaWrap">
+      <p class="empty-msg">Cargando…</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const msgEl = document.getElementById('msgCrear');
+
+function showMsg(text, ok) {
+  msgEl.textContent = text;
+  msgEl.className = 'msg ' + (ok ? 'ok' : 'err');
+  setTimeout(() => { msgEl.className = 'msg'; }, 4000);
+}
+
+async function cargarUsuarios() {
+  const wrap = document.getElementById('tablaWrap');
+  try {
+    const res = await fetch('/admin/usuarios');
+    if (!res.ok) throw new Error('No autorizado');
+    const users = await res.json();
+    if (users.length === 0) {
+      wrap.innerHTML = '<p class="empty-msg">No hay usuarios registrados aún.</p>';
+      return;
+    }
+    let html = '<table><thead><tr><th>ID</th><th>Usuario</th><th>Creado</th></tr></thead><tbody>';
+    for (const u of users) {
+      html += `<tr><td>${u.user_id}</td><td>${u.username}</td><td>${u.created_at}</td></tr>`;
+    }
+    html += '</tbody></table>';
+    wrap.innerHTML = html;
+  } catch(e) {
+    wrap.innerHTML = '<p class="empty-msg">Error al cargar usuarios.</p>';
+  }
+}
+
+document.getElementById('formCrear').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try {
+    const res = await fetch('/admin/usuarios', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (res.ok) {
+      showMsg(`Usuario "${data.username}" creado (ID ${data.user_id}).`, true);
+      e.target.reset();
+      cargarUsuarios();
+    } else {
+      showMsg(data.error || 'Error al crear usuario.', false);
+    }
+  } catch(err) {
+    showMsg('Error de conexión.', false);
+  }
+});
+
+cargarUsuarios();
+</script>
+<script src="/static/nav-user.js"></script>
+</body>
+</html>

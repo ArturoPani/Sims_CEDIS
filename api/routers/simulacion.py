@@ -4,11 +4,12 @@ Router de simulación — iniciar, detener, consultar estado y métricas.
 import json
 import os
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from api.sim_runner import runner
 from sim_core import Pedido, SimConfig
 from db import crud
+from api.deps import get_current_user_id
 
 # ── Configuración de features por escenario ────────────────────
 CONFIG_ESCENARIOS: dict[str, SimConfig] = {
@@ -80,13 +81,15 @@ def _cargar_politica_transito(escenario: str):
 # ── Endpoints ────────────────────────────────────────────────────
 
 @router.post("/iniciar", status_code=200)
-def iniciar_simulacion(params: IniciarSimIn):
+def iniciar_simulacion(params: IniciarSimIn, request: Request):
     """
     Inicia la simulación en un hilo de fondo.
     Usa los robots activos y pedidos del escenario almacenados en la BD.
     """
-    # Obtener spawns de robots activos en BD
-    robots_db = crud.listar_robots(params.escenario, solo_activos=True)
+    uid = get_current_user_id(request)
+
+    # Obtener spawns de robots activos en BD (del usuario)
+    robots_db = crud.listar_robots(params.escenario, solo_activos=True, user_id=uid)
     if not robots_db:
         raise HTTPException(
             status_code=400,
@@ -163,6 +166,7 @@ def obtener_estado():
 
 @router.get("/metricas")
 def obtener_metricas(
+    request: Request,
     guardar: bool = Query(False, description="Si es True, guarda las métricas en la BD (tabla runs)."),
     nombre: str = Query(None, description="Nombre personalizado para identificar la corrida."),
 ):
@@ -172,8 +176,9 @@ def obtener_metricas(
         raise HTTPException(status_code=400, detail="No hay simulación (activa o finalizada).")
 
     if guardar:
+        uid = get_current_user_id(request)
         etiqueta = nombre.strip() if nombre else runner.escenario
-        run_id = crud.guardar_run(etiqueta, m)
+        run_id = crud.guardar_run(etiqueta, m, user_id=uid)
         m["run_id"] = run_id
         m["guardado_en_bd"] = True
 

@@ -27,6 +27,15 @@ def init_schema() -> None:
     Llamar una vez al arrancar la app o desde un script de migración.
     """
     ddl = """
+    -- Tabla de usuarios
+    IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'users')
+    CREATE TABLE users (
+        user_id         INT IDENTITY(1,1) PRIMARY KEY,
+        username        NVARCHAR(100)   NOT NULL UNIQUE,
+        password_hash   NVARCHAR(256)   NOT NULL,
+        created_at      DATETIME2       NOT NULL DEFAULT SYSUTCDATETIME()
+    );
+
     -- Tabla de robots registrados
     IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'robots')
     CREATE TABLE robots (
@@ -35,7 +44,8 @@ def init_schema() -> None:
         escenario   NVARCHAR(100)   NOT NULL,
         spawn_x     INT             NOT NULL,
         spawn_y     INT             NOT NULL,
-        activo      BIT             NOT NULL DEFAULT 1
+        activo      BIT             NOT NULL DEFAULT 1,
+        user_id     INT             NULL REFERENCES users(user_id)
     );
 
     -- Tabla de pedidos
@@ -69,8 +79,16 @@ def init_schema() -> None:
         intercambios_arista             INT,
         deadlock                        INT,
         eventos_alto                    INT,
-        distancia_total_celdas          INT
+        distancia_total_celdas          INT,
+        user_id                         INT NULL REFERENCES users(user_id)
     );
+
+    -- Agregar user_id a tablas existentes si no existe
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('robots') AND name = 'user_id')
+        ALTER TABLE robots ADD user_id INT NULL REFERENCES users(user_id);
+
+    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('runs') AND name = 'user_id')
+        ALTER TABLE runs ADD user_id INT NULL REFERENCES users(user_id);
     """
     conn = get_connection()
     try:
