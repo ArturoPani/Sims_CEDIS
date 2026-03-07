@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CEDIS Sim — Panel de Control</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<!-- ═══ Top bar ═══ -->
+<div class="topbar">
+  <h1>CEDIS Sim</h1>
+  <nav style="display:flex; gap:6px;">
+    <span style="color:#00d4ff; padding:4px 12px; border:1px solid #00d4ff33; border-radius:4px; font-size:12px; background:#0d2342;">
+      🤖 Simulación
+    </span>
+    <a href="/metricas-page" style="color:#aaa; text-decoration:none; padding:4px 12px; border:1px solid #0f3460; border-radius:4px; font-size:12px;">
+      📊 Métricas
+    </a>
+    <a href="/experimento-page" style="color:#aaa; text-decoration:none; padding:4px 12px; border:1px solid #0f3460; border-radius:4px; font-size:12px;">
+      🧪 Experimento
+    </a>
+    <a href="/logout" style="color:#ff5252; text-decoration:none; padding:4px 12px; border:1px solid #ff525244; border-radius:4px; font-size:12px; margin-left:auto;">
+      🚪 Salir
+    </a>
+  </nav>
+  <label>Escenario:
+    <select id="selEscenario"></select>
+  </label>
+  <span><span class="status-dot off" id="dotStatus"></span> <span id="txtStatus">Desconectado</span></span>
+  <span id="txtTick" style="margin-left:auto; color:#00d4ff;"></span>
+</div>
+
+<!-- ═══ Main ═══ -->
+<div class="main">
+
+  <!-- Left panel -->
+  <div class="panel-left">
+
+    <!-- Robots -->
+    <div class="section">
+      <h2>Robots</h2>
+      <div class="form-group">
+        <label for="inRobotNombre">Nombre del robot</label>
+        <input id="inRobotNombre" placeholder="Ej: Robot-A1">
+      </div>
+      <button onclick="crearRobot()">+ Agregar Robot</button>
+      <div id="listaRobots" style="margin-top:10px; font-size:12px;"></div>
+    </div>
+
+    <!-- Pedidos -->
+    <div class="section">
+      <h2>Pedidos</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="inSeed">Semilla (seed)</label>
+          <input id="inSeed" type="number" placeholder="Ej: 42" value="42" min="0">
+        </div>
+        <div class="form-group">
+          <label for="inCantidad">Cantidad de pedidos</label>
+          <input id="inCantidad" type="number" placeholder="Ej: 20" value="20" min="1">
+        </div>
+      </div>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chkBurst"> Modo burst (todos a la vez)
+      </label>
+      <button onclick="generarPedidos()">Generar Pedidos</button>
+      <div id="infoPedidos" style="margin-top:8px; font-size:12px;"></div>
+    </div>
+
+    <!-- Simulación -->
+    <div class="section">
+      <h2>Simulación</h2>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="inTicks">Total de ticks</label>
+          <input id="inTicks" type="number" placeholder="Ej: 2000" value="2000" min="1">
+        </div>
+        <div class="form-group">
+          <label for="inSpeed">Seg / tick</label>
+          <input id="inSpeed" type="number" placeholder="Ej: 0.01" value="0.01" step="0.01" min="0.001">
+        </div>
+      </div>
+      <div class="sim-controls">
+        <button class="success" onclick="iniciarSim()">▶ Iniciar</button>
+        <button class="danger" onclick="detenerSim()">■ Detener</button>
+      </div>
+      <div class="form-group" style="margin-top:10px;">
+        <label class="checkbox-label" style="cursor:pointer;">
+          <input type="checkbox" id="chkGuardar"> 💾 Guardar métricas al finalizar
+        </label>
+      </div>
+      <div id="guardarNombreWrap" class="form-group" style="display:none; margin-top:6px;">
+        <label for="inNombreRun">Nombre de la corrida</label>
+        <input id="inNombreRun" type="text" placeholder="Ej: prueba-10-robots">
+      </div>
+      <script>
+        document.getElementById('chkGuardar').addEventListener('change', function() {
+          document.getElementById('guardarNombreWrap').style.display = this.checked ? 'block' : 'none';
+        });
+      </script>
+      <div id="infoSim" style="margin-top:8px; font-size:12px;"></div>
+    </div>
+
+  </div>
+
+  <!-- Center canvas -->
+  <div class="panel-center" id="panelCenter">
+    <div class="sim-info" id="simInfo">Cargando layout...</div>
+    <canvas id="gridCanvas"></canvas>
+    <div id="tooltip"></div>
+    <span class="zoom-label" id="zoomLabel">100%</span>
+    <div class="zoom-controls">
+      <button onclick="zoomIn()" title="Acercar">+</button>
+      <button onclick="zoomOut()" title="Alejar">−</button>
+      <button onclick="zoomFit()" title="Ajustar a pantalla">⊡</button>
+      <button onclick="zoomReset()" title="Zoom 100%">1:1</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ Bottom tables ═══ -->
+<div class="panel-bottom">
+  <div class="table-section">
+    <h3>Estado de Robots</h3>
+    <table>
+      <thead><tr><th>ID</th><th>Nombre</th><th>Pos</th><th>Estado</th><th>Pedido</th><th>ETA</th></tr></thead>
+      <tbody id="tbodyRobots"></tbody>
+    </table>
+  </div>
+  <div class="table-section">
+    <h3>Estado de Pedidos</h3>
+    <table>
+      <thead><tr><th>ID</th><th>Anaquel</th><th>Estación</th><th>Estado</th></tr></thead>
+      <tbody id="tbodyPedidos"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
