@@ -179,6 +179,17 @@
 
     /* ── Loading ── */
     .loading { color: #888; font-size: 12px; padding: 8px 0; }
+
+    /* ── Heatmaps ── */
+    .hm-section { margin-top: 28px; }
+    .hm-section h3 { font-size: 13px; color: #00d4ff; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .hm-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .hm-tab { background: #0f3460; color: #ccc; border: 1px solid #1e3a5f; padding: 6px 18px; border-radius: 20px; cursor: pointer; font-size: 12px; transition: all .2s; }
+    .hm-tab.active, .hm-tab:hover { background: #00d4ff; color: #0a0a1a; border-color: #00d4ff; }
+    .hm-grid { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+    .hm-card { background: #0f2340; border: 1px solid #1e3a5f; border-radius: 8px; padding: 12px; text-align: center; }
+    .hm-card-label { color: #aaa; font-size: 12px; margin-bottom: 8px; }
+    .hm-img { max-width: 100%; height: auto; border-radius: 4px; min-width: 260px; }
   </style>
 </head>
 <body>
@@ -196,7 +207,8 @@
     <a href="/experimento-page" style="color:#aaa; text-decoration:none; padding:4px 12px; border:1px solid #0f3460; border-radius:4px; font-size:12px;">
       🧪 Experimento
     </a>
-    <a href="/logout" style="color:#ff5252; text-decoration:none; padding:4px 12px; border:1px solid #ff525244; border-radius:4px; font-size:12px; margin-left:auto;">
+    <span id="navUser" style="color:#8899aa; font-size:12px; margin-left:auto; padding:4px 10px;"></span>
+    <a href="/logout" style="color:#ff5252; text-decoration:none; padding:4px 12px; border:1px solid #ff525244; border-radius:4px; font-size:12px;">
       🚪 Salir
     </a>
   </nav>
@@ -527,6 +539,21 @@ function renderResultados(data) {
         </tbody>
       </table>
     </div>
+
+    <!-- Heatmaps -->
+    ${(data.run_base.tiene_heatmaps || data.run_actual.tiene_heatmaps) ? `
+    <div class="hm-section" id="hmSection">
+      <h3>Mapas de calor</h3>
+      <div class="hm-tabs">
+        <button class="hm-tab active" onclick="switchHeatmap('visitas', this)">Visitas</button>
+        <button class="hm-tab" onclick="switchHeatmap('esperas', this)">Esperas</button>
+        <button class="hm-tab" onclick="switchHeatmap('ratio', this)">Ratio</button>
+      </div>
+      <div class="hm-grid" id="hmGrid">
+        ${data.run_base.tiene_heatmaps ? `<div class="hm-card"><div class="hm-card-label">Run base #${data.run_base.run_id}</div><img id="hmImgBase" src="/metricas/heatmaps/${data.run_base.run_id}/visitas?t=${Date.now()}" class="hm-img" alt="Heatmap base"></div>` : ''}
+        ${data.run_actual.tiene_heatmaps ? `<div class="hm-card"><div class="hm-card-label">Run actual #${data.run_actual.run_id}</div><img id="hmImgActual" src="/metricas/heatmaps/${data.run_actual.run_id}/visitas?t=${Date.now()}" class="hm-img" alt="Heatmap actual"></div>` : ''}
+      </div>
+    </div>` : ''}
   `;
 
   // Renderizar Chart.js
@@ -586,6 +613,24 @@ function fmtNum(v) {
   if (Math.abs(v) < 1) return v.toFixed(4);
   return v.toFixed(2);
 }
+
+function switchHeatmap(tipo, btn) {
+  document.querySelectorAll('#hmSection .hm-tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const ts = Date.now();
+  const base = document.getElementById('hmImgBase');
+  const actual = document.getElementById('hmImgActual');
+  // Reconstruct URLs from current img src (replace the tipo segment)
+  if (base) {
+    const src = base.src.replace(/\/heatmaps\/([^/]+)\/[^?]+/, `/heatmaps/$1/${tipo}`);
+    base.src = src.split('?')[0] + '?t=' + ts;
+  }
+  if (actual) {
+    const src = actual.src.replace(/\/heatmaps\/([^/]+)\/[^?]+/, `/heatmaps/$1/${tipo}`);
+    actual.src = src.split('?')[0] + '?t=' + ts;
+  }
+}
 </script>
+<script src="/static/nav-user.js"></script>
 </body>
 </html>

@@ -32,6 +32,7 @@ async function cargarEscenarios() {
     const resp = await fetch("/layout/escenarios");
     if (!resp.ok) return;
     const lista = await resp.json();
+    const maxRobotsMap = {};
     for (const sel of [document.getElementById("escA"), document.getElementById("escB")]) {
       sel.innerHTML = "";
       lista.forEach((e, i) => {
@@ -40,11 +41,27 @@ async function cargarEscenarios() {
         opt.textContent = e.label;
         if (i === 0) opt.selected = true;
         sel.appendChild(opt);
+        if (e.max_robots != null) maxRobotsMap[e.value] = e.max_robots;
       });
     }
     // Default: B selects the second scenario if available
     const selB = document.getElementById("escB");
     if (lista.length > 1) selB.value = lista[1].value;
+
+    // Track max_robots per scenario
+    function actualizarMaxRobots(lado) {
+      const esc = document.getElementById(`esc${lado}`).value;
+      const input = document.getElementById(`robots${lado}`);
+      const max = maxRobotsMap[esc];
+      if (max != null) {
+        input.max = max;
+        if (parseInt(input.value) > max) input.value = max;
+      }
+    }
+    for (const lado of ["A", "B"]) {
+      actualizarMaxRobots(lado);
+      document.getElementById(`esc${lado}`).addEventListener("change", () => actualizarMaxRobots(lado));
+    }
   } catch (e) {
     console.error("Error cargando escenarios", e);
   }
@@ -75,7 +92,11 @@ async function ejecutarExperimento(params) {
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-    throw new Error(err.detail || "Error desconocido");
+    const detail = err.detail;
+    const msg = Array.isArray(detail)
+      ? detail.map(e => (e.loc ? e.loc.slice(1).join(".") + ": " : "") + e.msg).join(" | ")
+      : (detail || "Error desconocido");
+    throw new Error(msg);
   }
   return await resp.json();
 }
@@ -192,6 +213,7 @@ function mostrarResultados() {
   }
 
   renderChart(labelsChart, valuesA, valuesB);
+  mostrarHeatmapsComparacion(resultadoA, resultadoB);
 }
 
 function mostrarResultadoUnico(lado, res) {
@@ -212,6 +234,8 @@ function mostrarResultadoUnico(lado, res) {
     `;
     tbody.appendChild(tr);
   }
+
+  mostrarHeatmapUnico(lado, res);
 }
 
 // ── Chart.js ────────────────────────────────────────────────────
@@ -286,4 +310,53 @@ function renderChart(labels, dataA, dataB) {
       },
     },
   });
+}
+
+// ── Heatmaps ──────────────────────────────────────────────
+let _heatmapTipo = "visitas";
+
+function mostrarHeatmapsComparacion(resA, resB) {
+  const sec = document.getElementById("heatmapExpSection");
+  const grid = document.getElementById("heatmapExpGrid");
+  const tieneA = resA && resA.heatmaps;
+  const tieneB = resB && resB.heatmaps;
+  if (!tieneA && !tieneB) { sec.style.display = "none"; return; }
+  sec.style.display = "block";
+  _heatmapTipo = "visitas";
+  document.querySelectorAll("#heatmapExpSection .hm-tab").forEach((t, i) => t.classList.toggle("active", i === 0));
+  _renderHeatmapGrid(grid, resA, resB, _heatmapTipo);
+}
+
+function mostrarHeatmapUnico(lado, res) {
+  const sec = document.getElementById("heatmapExpSection");
+  const grid = document.getElementById("heatmapExpGrid");
+  if (!res || !res.heatmaps) { sec.style.display = "none"; return; }
+  sec.style.display = "block";
+  _heatmapTipo = "visitas";
+  document.querySelectorAll("#heatmapExpSection .hm-tab").forEach((t, i) => t.classList.toggle("active", i === 0));
+  const resA = lado === "A" ? res : null;
+  const resB = lado === "B" ? res : null;
+  _renderHeatmapGrid(grid, resA, resB, _heatmapTipo);
+}
+
+function _renderHeatmapGrid(container, resA, resB, tipo) {
+  const ts = Date.now();
+  const cards = [];
+  if (resA && resA.heatmaps) cards.push({ label: "Sim A", url: resA.heatmaps[tipo] });
+  if (resB && resB.heatmaps) cards.push({ label: "Sim B", url: resB.heatmaps[tipo] });
+  container.innerHTML = cards.map(c =>
+    `<div class="hm-card"><div class="hm-card-label">${c.label}</div><img src="${c.url}?t=${ts}" class="hm-img" alt="Heatmap ${c.label}"></div>`
+  ).join("");
+}
+
+function switchHeatmapExp(tipo, btn) {
+  _heatmapTipo = tipo;
+  document.querySelectorAll("#heatmapExpSection .hm-tab").forEach(t => t.classList.remove("active"));
+  if (btn) btn.classList.add("active");
+  _renderHeatmapGrid(
+    document.getElementById("heatmapExpGrid"),
+    resultadoA,
+    resultadoB,
+    tipo
+  );
 }

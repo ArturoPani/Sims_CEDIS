@@ -2,7 +2,8 @@
 Endpoints para consulta y comparación de métricas de runs guardados en Azure SQL.
 Reutiliza la lógica de comparar_metricas.py sin depender de matplotlib.
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import sys, os, math
@@ -17,6 +18,7 @@ from comparar_metricas import (
     _etiqueta_metrica,
     _direccion_metricas,
 )
+from api.deps import get_current_user_id
 
 router = APIRouter(prefix="/metricas", tags=["metricas"])
 
@@ -60,10 +62,11 @@ def _run_a_dict_metricas(run: dict) -> dict:
 #  GET /metricas/runs
 # ════════════════════════════════════════════════════════════════
 @router.get("/runs")
-def get_runs(escenario: Optional[str] = Query(None)):
-    """Lista todas las corridas guardadas, opcionalmente filtradas por escenario."""
+def get_runs(request: Request, escenario: Optional[str] = Query(None)):
+    """Lista todas las corridas guardadas del usuario actual."""
     try:
-        runs = listar_runs(escenario)
+        uid = get_current_user_id(request)
+        runs = listar_runs(escenario, user_id=uid)
         return runs
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -97,10 +100,11 @@ class ComparacionRequest(BaseModel):
 
 
 @router.post("/comparar")
-def comparar(req: ComparacionRequest):
+def comparar(req: ComparacionRequest, request: Request):
     """Compara dos runs y devuelve resultados de evaluación."""
     try:
-        runs = listar_runs()
+        uid = get_current_user_id(request)
+        runs = listar_runs(user_id=uid)
         mapa = {r["run_id"]: r for r in runs}
 
         if req.run_id_base not in mapa:
@@ -138,12 +142,14 @@ def comparar(req: ComparacionRequest):
                 "escenario": mapa[req.run_id_base].get("escenario"),
                 "fecha": str(mapa[req.run_id_base].get("fecha", "")),
                 "seed": mapa[req.run_id_base].get("seed"),
+                "tiene_heatmaps": _tiene_heatmaps(req.run_id_base),
             },
             "run_actual": {
                 "run_id": req.run_id_actual,
                 "escenario": mapa[req.run_id_actual].get("escenario"),
                 "fecha": str(mapa[req.run_id_actual].get("fecha", "")),
                 "seed": mapa[req.run_id_actual].get("seed"),
+                "tiene_heatmaps": _tiene_heatmaps(req.run_id_actual),
             },
             "resultados": resultados,
         }
@@ -151,3 +157,24 @@ def comparar(req: ComparacionRequest):
         raise
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+# ════════════════════════════════════════════════════════════════
+#  GET /metricas/heatmaps/{run_id}/{tipo}
+# ════════════════════════════════════════════════════════════════
+
+def _tiene_heatmaps(run_id: int) -> bool:
+    ruta = os.path.join("outputs", "runs", str(run_id), "heatmap_visitas.png")
+    return os.path.isfile(ruta)
+
+
+@router.get("/heatmaps/{run_id}/{tipo}")
+def obtener_heatmap(run_id: int, tipo: str, request: Request):
+    """Sirve una imagen heatmap. tipo: visitas | esperas | ratio"""
+    get_current_user_id(request)  # requiere sesión
+    if tipo not in ("visitas", "esperas", "ratio"):
+        raise HTTPException(400, "tipo debe ser visitas, esperas o ratio")
+    ruta = os.path.join("outputs", "runs", str(run_id), f"heatmap_{tipo}.png")
+    if not os.path.isfile(ruta):
+        raise HTTPException(404, "Heatmap no encontrado")
+    return FileResponse(ruta, media_type="image/png")

@@ -1,6 +1,7 @@
 """
 Router de layout — sirve el grid del almacén para renderizar en el frontend.
 """
+import json
 import os
 import numpy as np
 from fastapi import APIRouter, HTTPException, Query
@@ -25,9 +26,18 @@ def listar_escenarios():
     for nombre in sorted(os.listdir(carpeta)):
         ruta = os.path.join(carpeta, nombre)
         if os.path.isdir(ruta) and os.path.isfile(os.path.join(ruta, "layout.npy")):
+            ruta_spawn = os.path.join(ruta, "spawn.json")
+            max_robots = None
+            if os.path.isfile(ruta_spawn):
+                try:
+                    with open(ruta_spawn, "r", encoding="utf-8") as _f:
+                        max_robots = len(json.load(_f))
+                except Exception:
+                    pass
             escenarios.append({
                 "value": nombre,
                 "label": NOMBRES_ESCENARIOS.get(nombre, nombre),
+                "max_robots": max_robots,
             })
     return escenarios
 

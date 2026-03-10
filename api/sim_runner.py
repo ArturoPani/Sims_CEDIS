@@ -6,6 +6,8 @@ import threading
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+import numpy as np
+import os
 
 from sim_core import Pedido, SimAlmacen, SimConfig, cargar_layout
 
@@ -34,6 +36,9 @@ class SimRunner:
         self._seg_por_tick = 0.05  # configurable
         self._escenario: str = ""
         self._finalizado = False
+        self._visitas: Optional[np.ndarray] = None
+        self._esperas: Optional[np.ndarray] = None
+        self._grid: Optional[np.ndarray] = None
 
     # ── Estado público ───────────────────────────────────────────
 
@@ -75,6 +80,11 @@ class SimRunner:
             f"outputs/{escenario}/spawn.json",
         )
 
+        alto, ancho = grid.shape
+        self._grid = grid
+        self._visitas = np.zeros((alto, ancho), dtype=np.int32)
+        self._esperas = np.zeros((alto, ancho), dtype=np.int32)
+
         sim = SimAlmacen(
             grid=grid,
             estacion_dock=estacion_dock,
@@ -112,6 +122,12 @@ class SimRunner:
                     if self._sim.tick >= self._ticks_objetivo:
                         break
                     self._sim.step()
+                    if self._visitas is not None:
+                        for r in self._sim.lista_robots:
+                            x, y = r.pos
+                            self._visitas[y, x] += 1
+                            if r.estado == "esperando":
+                                self._esperas[y, x] += 1
                 time.sleep(self._seg_por_tick)
         finally:
             with self._lock:
@@ -182,6 +198,25 @@ class SimRunner:
             if self._sim is None:
                 return None
             return self._sim.metricas()
+
+    def generar_heatmaps(self, run_id: int) -> bool:
+        """Genera y guarda los 3 heatmaps para el run dado. Devuelve True si OK."""
+        with self._lock:
+            if self._grid is None or self._visitas is None or self._esperas is None:
+                return False
+            grid = self._grid.copy()
+            visitas = self._visitas.copy()
+            esperas = self._esperas.copy()
+
+        try:
+            from visualiza_simulacion import guardar_heatmaps
+            carpeta = os.path.join("outputs", "runs", str(run_id))
+            os.makedirs(carpeta, exist_ok=True)
+            prefijo = os.path.join(carpeta, "heatmap")
+            guardar_heatmaps(grid, visitas, esperas, prefijo=prefijo)
+            return True
+        except Exception:
+            return False
 
 
 # Instancia global (singleton)

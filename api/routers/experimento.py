@@ -8,12 +8,13 @@ import os
 from typing import Optional
 
 import numpy as np
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from sim_core import Pedido, SimAlmacen, SimConfig, cargar_layout
 from api.routers.simulacion import _cargar_politica_transito, CONFIG_ESCENARIOS
 from db import crud
+from api.deps import get_current_user_id
 
 router = APIRouter(prefix="/experimento", tags=["Experimento rápido"])
 
@@ -22,7 +23,7 @@ router = APIRouter(prefix="/experimento", tags=["Experimento rápido"])
 
 class ExperimentoIn(BaseModel):
     escenario: str = "benchmark"
-    num_robots: int = Field(5, ge=1, le=96)
+    num_robots: int = Field(5, ge=1, le=500)
     seed: int = 42
     num_pedidos: int = Field(300, ge=1, le=5000)
     ticks: int = Field(10000, ge=100, le=100000)
@@ -84,7 +85,7 @@ def _generar_pedidos_memoria(
 
 
 def _cargar_spawns(escenario: str, num_robots: int) -> list[tuple]:
-    """Lee spawn.json y devuelve los primeros N puntos."""
+    """Lee spawn.json y devuelve los primeros N puntos (clampea si hay menos)."""
     ruta = os.path.join("outputs", escenario, "spawn.json")
     if not os.path.isfile(ruta):
         raise FileNotFoundError(f"No existe spawn.json para escenario '{escenario}'.")
@@ -92,19 +93,14 @@ def _cargar_spawns(escenario: str, num_robots: int) -> list[tuple]:
     with open(ruta, "r", encoding="utf-8") as f:
         todos = json.load(f)
 
-    if len(todos) < num_robots:
-        raise ValueError(
-            f"El escenario '{escenario}' solo tiene {len(todos)} spawns "
-            f"pero se pidieron {num_robots} robots."
-        )
-
-    return [(int(p[0]), int(p[1])) for p in todos[:num_robots]]
+    n = min(num_robots, len(todos))
+    return [(int(p[0]), int(p[1])) for p in todos[:n]]
 
 
 # ── Endpoint ─────────────────────────────────────────────────────
 
 @router.post("/correr")
-def correr_experimento(params: ExperimentoIn):
+def correr_experimento(params: ExperimentoIn, request: Request):
     """
     Corre una simulación completa de forma síncrona (sin hilo de fondo)
     y devuelve las métricas al terminar.
@@ -141,12 +137,12 @@ def correr_experimento(params: ExperimentoIn):
     # Política de tránsito
     movimientos, costos, no_stop = _cargar_politica_transito(params.escenario)
 
-    # Construir simulación
+    # Construir simulación (len(spawns) por si se clampó)
     sim = SimAlmacen(
         grid=grid,
         estacion_dock=estacion_dock,
         anaquel_home=anaquel_home,
-        robots=params.num_robots,
+        robots=len(spawns),
         puntos_spawn=spawns,
         pedidos=pedidos,
         seed=params.seed,
@@ -156,16 +152,43 @@ def correr_experimento(params: ExperimentoIn):
         config=cfg,
     )
 
+    # Tracking visitas/esperas para heatmaps
+    import numpy as _np
+    alto, ancho = grid.shape
+    _visitas = _np.zeros((alto, ancho), dtype=_np.int32)
+    _esperas = _np.zeros((alto, ancho), dtype=_np.int32)
+
     # Correr todos los ticks (síncrono, sin sleep)
-    sim.run(params.ticks)
+    for _ in range(params.ticks):
+        sim.step()
+        for r in sim.lista_robots:
+            x, y = r.pos
+            _visitas[y, x] += 1
+            if r.estado == "esperando":
+                _esperas[y, x] += 1
 
     metricas = sim.metricas()
 
     # Guardar opcionalmente
     if params.guardar:
+        uid = get_current_user_id(request)
         etiqueta = (params.nombre or "").strip() or params.escenario
-        run_id = crud.guardar_run(etiqueta, metricas)
+        run_id = crud.guardar_run(etiqueta, metricas, user_id=uid)
         metricas["run_id"] = run_id
         metricas["guardado_en_bd"] = True
+
+        try:
+            from visualiza_simulacion import guardar_heatmaps
+            carpeta_hm = os.path.join("outputs", "runs", str(run_id))
+            os.makedirs(carpeta_hm, exist_ok=True)
+            guardar_heatmaps(grid, _visitas, _esperas, prefijo=os.path.join(carpeta_hm, "heatmap"))
+            metricas["heatmaps_generados"] = True
+            metricas["heatmaps"] = {
+                "visitas": f"/metricas/heatmaps/{run_id}/visitas",
+                "esperas": f"/metricas/heatmaps/{run_id}/esperas",
+                "ratio":   f"/metricas/heatmaps/{run_id}/ratio",
+            }
+        except Exception:
+            metricas["heatmaps_generados"] = False
 
     return metricas
