@@ -61,7 +61,8 @@ def _bfs_alcanzable(grid: np.ndarray, celdas_inicio: List[Celda]) -> np.ndarray:
                 cola.append((nx, ny))
     return visto
 
-def generar_layout(seed: int, ancho: int, alto: int, estaciones: int) -> Dict:
+def generar_layout(seed: int, ancho: int, alto: int, estaciones: int,
+                   ancho_parking: int = None, alto_parking: int = None) -> Dict:
     """
     Concepto del layout:
     - Frente sur: fila de estaciones (y=H-2) y carril buffer (y=H-3)
@@ -107,8 +108,8 @@ def generar_layout(seed: int, ancho: int, alto: int, estaciones: int) -> Dict:
     _recortar_rectangulo(grid, 1, y_buffer - 2, ancho - 2, 2, LIBRE)
 
     # Zona de parking/carga (proporcional al grid)
-    ancho_parking = min(240, ancho - 5)
-    alto_parking = min(250, alto - 10)
+    ancho_parking = ancho_parking if ancho_parking is not None else min(240, ancho - 5)
+    alto_parking = alto_parking if alto_parking is not None else min(250, alto - 10)
     x_parking0, y_parking0 = 2, alto - (alto_parking + 5)
     _recortar_rectangulo(grid, x_parking0, y_parking0, ancho_parking, alto_parking, LIBRE)
 
@@ -192,6 +193,12 @@ def generar_layout(seed: int, ancho: int, alto: int, estaciones: int) -> Dict:
     for yy in range(y_top + 5, y_bottom, cada):
         _recortar_rectangulo(grid, x_left, yy, ancho_storage, 2, LIBRE)
 
+    # Re-aplicar zona de parking DESPUÉS de los anaqueles para evitar que queden sobreescritos.
+    # Las celdas que vuelven a LIBRE se eliminan también del dict de anaqueles.
+    _recortar_rectangulo(grid, x_parking0, y_parking0, ancho_parking, alto_parking, LIBRE)
+    anaqueles = {aid: home for aid, home in anaqueles.items()
+                 if grid[home[1], home[0]] == ANAQUEL}
+
     # Conectar parking con apron
     x_corredor = x_parking0 + ancho_parking + 2
     _recortar_rectangulo(grid, x_corredor, y_parking0 - 15, 2, (alto - 2) - (y_parking0 - 15), LIBRE)
@@ -237,6 +244,10 @@ def main():
     parser.add_argument("--ancho", type=int, default=120)
     parser.add_argument("--alto", type=int, default=80)
     parser.add_argument("--estaciones", type=int, default=20)
+    parser.add_argument("--ancho_parking", type=int, default=None,
+                        help="(Opcional) Ancho de la zona de parking. Por defecto se calcula del grid.")
+    parser.add_argument("--alto_parking", type=int, default=None,
+                        help="(Opcional) Alto de la zona de parking. Por defecto se calcula del grid.")
 
     parser.add_argument(
         "--escenario",
@@ -278,7 +289,8 @@ def main():
 
     asegurar_dirs_de_salidas([ruta_layout, ruta_estaciones, ruta_anaqueles, ruta_spawn])
 
-    layout = generar_layout(args.seed, args.ancho, args.alto, args.estaciones)
+    layout = generar_layout(args.seed, args.ancho, args.alto, args.estaciones,
+                            args.ancho_parking, args.alto_parking)
     grid = layout["grid"]
 
     # Guardar grid
